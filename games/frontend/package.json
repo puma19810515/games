@@ -1,0 +1,28 @@
+{
+  "name": "slot-game-frontend",
+  "version": "1.0.0",
+  "description": "Slot Game Frontend with Vue 3 + TypeScript + Element Plus",
+  "scripts": {
+    "serve": "vue-cli-service serve",
+    "build": "vue-cli-service build",
+    "lint": "vue-cli-service lint"
+  },
+  "dependencies": {
+    "vue": "^3.4.21",
+    "vue-router": "^4.3.0",
+    "pinia": "^2.1.7",
+    "element-plus": "^2.6.0",
+    "axios": "^1.6.7",
+    "@element-plus/icons-vue": "^2.3.1"
+  },
+  "devDependencies": {
+    "@vue/cli-service": "^5.0.8",
+    "@vue/cli-plugin-typescript": "^5.0.8",
+    "@vue/cli-plugin-router": "^5.0.8",
+    "typescript": "^5.3.3",
+    "sass": "^1.71.1",
+    "sass-loader": "^14.1.1",
+    "vue-loader": "^17.4.2",
+    "webpack": "^5.90.3"
+  }
+}

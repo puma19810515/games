@@ -1,0 +1,104 @@
+spring:
+  application:
+    name: games
+  # 主从数据源配置 - 实现读写分离
+  # 注意：如果没有配置 MySQL 主从复制，主从库暂时指向同一个数据库
+  datasource:
+    # 主库配置 - 处理所有写操作（INSERT, UPDATE, DELETE）
+    master:
+      jdbc-url: jdbc:mysql://localhost:3306/taskdb?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+      username: taskuser
+      password: taskpass
+      driver-class-name: com.mysql.cj.jdbc.Driver
+      hikari:
+        maximum-pool-size: 200  # 主库连接池：200（写操作较少但重要）
+        minimum-idle: 30
+        connection-timeout: 3000
+        idle-timeout: 300000
+        pool-name: MasterHikariPool
+    # 从库配置 - 处理所有读操作（SELECT）
+    # TODO: 配置 MySQL 主从复制后，修改为实际的从库地址 localhost:3307
+    slave:
+      jdbc-url: jdbc:mysql://localhost:3306/taskdb?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+      username: taskuser
+      password: taskpass
+      driver-class-name: com.mysql.cj.jdbc.Driver
+      hikari:
+        maximum-pool-size: 300  # 从库连接池：300（读操作更多）
+        minimum-idle: 50
+        connection-timeout: 3000
+        idle-timeout: 300000
+        pool-name: SlaveHikariPool
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+        format_sql: true
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      password:
+      database: 0
+      timeout: 3000ms
+      jedis:
+        pool:
+          max-active: 100
+          max-idle: 50
+          min-idle: 20
+          max-wait: 1000ms
+
+server:
+  port: 8080
+  machine-id: 1
+
+jwt:
+  secret: SlotSuperSecretKeyForJWTTokenGenerationPumaMustBeAtLeast256BitsLong123456789
+  expiration: 86400000 # 24 hours in milliseconds
+
+# 會員註冊時的初始餘額設定
+register:
+  initial-balance: 100000
+
+# RocketMQ Configuration
+rocketmq:
+  name-server: localhost:9876
+  producer:
+    group: slot-game-producer
+    send-message-timeout: 3000
+    compress-message-body-threshold: 4096
+    max-message-size: 4194304
+    retry-times-when-send-failed: 2
+    retry-times-when-send-async-failed: 2
+  consumer:
+    group: slot-game-consumer
+
+# Resilience4j Rate Limiter Configuration
+resilience4j:
+  ratelimiter:
+    instances:
+      spin:
+        limit-for-period: 10  # 每個時間窗口允許10個請求
+        limit-refresh-period: 1s  # 時間窗口1秒
+        timeout-duration: 0s  # 不等待，立即返回
+      deposit:
+        limit-for-period: 5
+        limit-refresh-period: 1s
+        timeout-duration: 0s
+      withdraw:
+        limit-for-period: 3
+        limit-refresh-period: 1s
+        timeout-duration: 0s
+
+# Actuator for monitoring
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,ratelimiters
+  endpoint:
+    health:
+      show-details: always

@@ -1,5 +1,6 @@
 package com.games.dto;
 
+import com.games.entity.Merchant;
 import com.games.enums.TransactionType;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -15,6 +16,7 @@ public class TransactionMessage implements Serializable {
     private static final long serialVersionUID = 1L;
 
     private Long userId;
+    private Long merchantId;
     private TransactionType type;
     private BigDecimal amount;
     private BigDecimal balanceBefore;

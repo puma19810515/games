@@ -37,7 +37,6 @@ public class RedisDataInitializer implements CommandLineRunner {
 
     @Override
     public void run(String... args) {
-
         log.info("init redis");
         List<GameSetting> settings = gameSettingRepository.findAll();
         if (settings.isEmpty()) {

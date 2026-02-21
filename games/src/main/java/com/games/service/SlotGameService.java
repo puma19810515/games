@@ -11,6 +11,7 @@ import com.games.dto.BetRecordsResponse;
 import com.games.dto.BetResponse;
 import com.games.dto.RtpUpdateMessage;
 import com.games.entity.Bet;
+import com.games.entity.Merchant;
 import com.games.entity.User;
 import com.games.lock.RedisLock;
 import com.games.repository.BetRepository;
@@ -51,10 +52,10 @@ public class SlotGameService {
     private final ObjectMapper objectMapper;
 
     @Transactional
-    public BetResponse placeBet(User user, String gameCode, BigDecimal betAmount) throws JsonProcessingException {
+    public BetResponse placeBet(Merchant merchant, User user, String gameCode, BigDecimal betAmount) throws JsonProcessingException {
         final Long userId = user.getId();  // 保存到 final 变量
-        String lockKey = GlobeConstant.USER + GlobeConstant.SEMICOLON
-                + RedisConstant.PLACE_BET + userId;
+        String lockKey = GlobeConstant.USER + GlobeConstant.SEMICOLON + merchant.getApiKey()
+                + GlobeConstant.SEMICOLON + RedisConstant.PLACE_BET + userId;
         String lockValue = UUID.randomUUID().toString();
 
         boolean locked = redisLock.tryLockWithRetry(lockKey,
@@ -70,7 +71,7 @@ public class SlotGameService {
             String json = (String) redisTemplate.opsForHash().get(RedisConstant.GAME_SETTING_ALL, gameCode);
             GameProperties gameProperties = objectMapper.readValue(json, GameProperties.class);
             // 使用悲观锁重新查询用户，确保数据库层面的并发安全
-            User lockedUser = userRepository.findByIdWithLock(userId)
+            User lockedUser = userRepository.findByIdWithLock(merchant.getId(), userId)
                     .orElseThrow(() -> new RuntimeException("User not found: " + userId));
 
             if (betAmount.compareTo(gameProperties.getMinBet()) < 0) {
@@ -94,6 +95,7 @@ public class SlotGameService {
 
             Bet bet = new Bet();
             bet.setId(idGenerator.nextId());
+            bet.setMerchant(merchant);
             bet.setUser(lockedUser);
             bet.setBetAmount(betAmount);
             bet.setWinAmount(winAmount);
@@ -107,10 +109,10 @@ public class SlotGameService {
             bet.setGameCode(gameCode);
             bet = betRepository.save(bet);
 
-            walletService.deductBalance(lockedUser, betAmount, bet, "Slot game bet");
+            walletService.deductBalance(merchant, lockedUser, betAmount, bet, "Slot game bet");
 
             if (isWin) {
-                walletService.addBalance(lockedUser, winAmount, bet, "Slot game win");
+                walletService.addBalance(merchant, lockedUser, winAmount, bet, "Slot game win");
             }
 
             // 使用异步消息更新 RTP 统计，提高性能

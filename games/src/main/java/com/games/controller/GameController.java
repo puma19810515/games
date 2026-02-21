@@ -1,6 +1,7 @@
 package com.games.controller;
 
 import com.games.dto.*;
+import com.games.entity.Merchant;
 import com.games.entity.User;
 import com.games.service.AuthService;
 import com.games.service.SlotGameService;
@@ -28,12 +29,13 @@ public class GameController {
     @RateLimiter(name = "spin", fallbackMethod = "spinFallback")
     public ResponseEntity<ApiResponse<BetResponse>> spin(@PathVariable String gameCode,
                                                          @Valid @RequestBody BetRequest request,
-                                                         Authentication authentication) {
+                                                         Authentication authentication,
+                                                         @RequestAttribute(name = "merchant", required = false) Merchant merchant) {
         try {
             String username = authentication.getName();
-            User user = authService.getUserByUsername(username);
+            User user = authService.getUserByUsername(merchant.getId(), username);
 
-            BetResponse response = slotGameService.placeBet(user, gameCode, request.getAmount());
+            BetResponse response = slotGameService.placeBet(merchant, user, gameCode, request.getAmount());
             return ResponseEntity.ok(ApiResponse.success(response));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
@@ -42,17 +44,19 @@ public class GameController {
 
     // 限流降级方法
     public ResponseEntity<ApiResponse<BetResponse>> spinFallback(String gameCode, BetRequest request,
-                                                                 Authentication authentication, Throwable t) {
+                                                                 Authentication authentication, Merchant merchant,
+                                                                 Throwable t) {
         log.info("Rate limit exceeded for spin endpoint: {}", t.getMessage());
         return ResponseEntity.status(429)
                 .body(ApiResponse.error("Too many requests. Please try again later."));
     }
 
     @GetMapping("/balance")
-    public ResponseEntity<ApiResponse<Map<String, Object>>> getBalance(Authentication authentication) {
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getBalance(Authentication authentication,
+                                                                       @RequestAttribute(name = "merchant", required = false) Merchant merchant) {
         try {
             String username = authentication.getName();
-            User user = authService.getUserByUsername(username);
+            User user = authService.getUserByUsername(merchant.getId(), username);
 
             Map<String, Object> data = new HashMap<>();
             data.put("username", user.getUsername());
@@ -66,10 +70,11 @@ public class GameController {
 
     @PostMapping("/records")
     public ResponseEntity<ApiResponse<PageDataResUtil<BetRecordsResponse>>> getRecords(Authentication authentication,
-                                                                                       @RequestBody BetRecordsRequest request) {
+                                                                                       @RequestBody BetRecordsRequest request,
+                                                                                       @RequestAttribute(name = "merchant", required = false) Merchant merchant) {
         try {
             String username = authentication.getName();
-            User user = authService.getUserByUsername(username);
+            User user = authService.getUserByUsername(merchant.getId(), username);
 
             PageDataResUtil<BetRecordsResponse> data = slotGameService.getBetRecords(user, request);
 

@@ -3,6 +3,7 @@ package com.games.controller;
 import com.games.dto.ApiResponse;
 import com.games.dto.DepositRequest;
 import com.games.dto.WalletResponse;
+import com.games.entity.Merchant;
 import com.games.entity.User;
 import com.games.enums.TransactionType;
 import com.games.service.AuthService;
@@ -26,12 +27,13 @@ public class WalletController {
     @RateLimiter(name = "deposit", fallbackMethod = "depositFallback")
     public ResponseEntity<ApiResponse<WalletResponse>> deposit(
             @Valid @RequestBody DepositRequest request,
-            Authentication authentication) {
+            Authentication authentication,
+            @RequestAttribute(name = "merchant", required = false) Merchant merchant) {
         try {
             String username = authentication.getName();
-            User user = authService.getUserByUsername(username);
+            User user = authService.getUserByUsername(merchant.getId(), username);
 
-            User updatedUser = walletService.deposit(user, request.getAmount());
+            User updatedUser = walletService.deposit(merchant, user, request.getAmount());
 
             WalletResponse response = new WalletResponse(
                     updatedUser.getUsername(),
@@ -49,19 +51,21 @@ public class WalletController {
     }
 
     // 存款限流降级方法
-    public ResponseEntity<ApiResponse<WalletResponse>> depositFallback(DepositRequest request, Authentication authentication, Throwable t) {
+    public ResponseEntity<ApiResponse<WalletResponse>> depositFallback(DepositRequest request, Authentication authentication,
+                                                                       Merchant merchant, Throwable t) {
         return ResponseEntity.status(429)
                 .body(ApiResponse.error("Too many deposit requests. Please try again later."));
     }
 
     @PostMapping("/withdraw-all")
     @RateLimiter(name = "withdraw", fallbackMethod = "withdrawAllFallback")
-    public ResponseEntity<ApiResponse<WalletResponse>> withdrawAll(Authentication authentication) {
+    public ResponseEntity<ApiResponse<WalletResponse>> withdrawAll(Authentication authentication,
+                                                                   @RequestAttribute(name = "merchant", required = false) Merchant merchant) {
         try {
             String username = authentication.getName();
-            User user = authService.getUserByUsername(username);
+            User user = authService.getUserByUsername(merchant.getId(), username);
 
-            User updatedUser = walletService.withdrawAll(user);
+            User updatedUser = walletService.withdrawAll(merchant, user);
 
             WalletResponse response = new WalletResponse(
                     updatedUser.getUsername(),
@@ -79,7 +83,8 @@ public class WalletController {
     }
 
     // 提款限流降级方法
-    public ResponseEntity<ApiResponse<WalletResponse>> withdrawAllFallback(Authentication authentication, Throwable t) {
+    public ResponseEntity<ApiResponse<WalletResponse>> withdrawAllFallback(Authentication authentication,
+                                                                           Merchant merchant, Throwable t) {
         return ResponseEntity.status(429)
                 .body(ApiResponse.error("Too many withdraw requests. Please try again later."));
     }

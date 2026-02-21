@@ -4,9 +4,11 @@ import com.games.constant.GlobeConstant;
 import com.games.constant.RedisConstant;
 import com.games.dto.TransactionMessage;
 import com.games.entity.Bet;
+import com.games.entity.Merchant;
 import com.games.entity.User;
 import com.games.enums.TransactionType;
 import com.games.lock.RedisLock;
+import com.games.repository.MerchantRepository;
 import com.games.repository.UserRepository;
 import com.games.rocketmq.producer.MessageProducerService;
 import lombok.RequiredArgsConstructor;
@@ -34,7 +36,7 @@ public class WalletService {
      * 传入的 user 对象应该已经通过悲观锁获取
      */
     @Transactional(propagation = org.springframework.transaction.annotation.Propagation.MANDATORY)
-    public void deductBalance(User user, BigDecimal amount, Bet bet, String description) {
+    public void deductBalance(Merchant merchant, User user, BigDecimal amount, Bet bet, String description) {
         BigDecimal balanceBefore = user.getBalance();
         BigDecimal newBalance = balanceBefore.subtract(amount);
 
@@ -45,7 +47,7 @@ public class WalletService {
         user.setBalance(newBalance);
         userRepository.save(user);
 
-        createTransaction(user, TransactionType.BET, amount, balanceBefore, newBalance, description, bet);
+        createTransaction(user, merchant, TransactionType.BET, amount, balanceBefore, newBalance, description, bet);
     }
 
     /**
@@ -54,23 +56,23 @@ public class WalletService {
      * 传入的 user 对象应该已经通过悲观锁获取
      */
     @Transactional(propagation = org.springframework.transaction.annotation.Propagation.MANDATORY)
-    public void addBalance(User user, BigDecimal amount, Bet bet, String description) {
+    public void addBalance(Merchant merchant, User user, BigDecimal amount, Bet bet, String description) {
         BigDecimal balanceBefore = user.getBalance();
         BigDecimal newBalance = balanceBefore.add(amount);
 
         user.setBalance(newBalance);
         userRepository.save(user);
 
-        createTransaction(user, TransactionType.WIN, amount, balanceBefore, newBalance, description, bet);
+        createTransaction(user, merchant, TransactionType.WIN, amount, balanceBefore, newBalance, description, bet);
     }
 
     @Transactional
-    public User deposit(User user, BigDecimal amount) {
+    public User deposit(Merchant merchant, User user, BigDecimal amount) {
         final Long userId = user.getId();  // 保存到 final 变量
         log.info("Deposit new user: {}, amount:{}", userId, amount);
 
-        String lockKey = GlobeConstant.USER + GlobeConstant.SEMICOLON
-                + RedisConstant.DEPOSIT + userId;
+        String lockKey = GlobeConstant.USER + GlobeConstant.SEMICOLON + merchant.getApiKey()
+                + GlobeConstant.SEMICOLON + RedisConstant.DEPOSIT + userId;
         String lockValue = UUID.randomUUID().toString();
 
         boolean locked = redisLock.tryLockWithRetry(lockKey,
@@ -83,7 +85,7 @@ public class WalletService {
 
         try {
             // 使用悲观锁重新查询用户，确保数据库层面的并发安全
-            User lockedUser = userRepository.findByIdWithLock(userId)
+            User lockedUser = userRepository.findByIdWithLock(merchant.getId(), userId)
                     .orElseThrow(() -> new RuntimeException("User not found: " + userId));
 
             BigDecimal balanceBefore = lockedUser.getBalance();
@@ -92,7 +94,7 @@ public class WalletService {
             lockedUser.setBalance(newBalance);
             user = userRepository.save(lockedUser);
 
-            createTransaction(user, TransactionType.DEPOSIT, amount, balanceBefore, newBalance,
+            createTransaction(user, merchant, TransactionType.DEPOSIT, amount, balanceBefore, newBalance,
                     "Deposit to wallet", null);
         } finally {
             redisLock.releaseLock(lockKey, lockValue);
@@ -101,11 +103,11 @@ public class WalletService {
     }
 
     @Transactional
-    public User withdrawAll(User user) {
+    public User withdrawAll(Merchant merchant, User user) {
         final Long userId = user.getId();  // 保存到 final 变量
 
-        String lockKey = GlobeConstant.USER + GlobeConstant.SEMICOLON
-                + RedisConstant.WITHDRAW + userId;
+        String lockKey = GlobeConstant.USER + GlobeConstant.SEMICOLON + merchant.getApiKey()
+                + GlobeConstant.SEMICOLON + RedisConstant.WITHDRAW + userId;
         String lockValue = UUID.randomUUID().toString();
 
         boolean locked = redisLock.tryLockWithRetry(lockKey,
@@ -118,7 +120,7 @@ public class WalletService {
 
         try {
             // 使用悲观锁重新查询用户，确保数据库层面的并发安全
-            User lockedUser = userRepository.findByIdWithLock(userId)
+            User lockedUser = userRepository.findByIdWithLock(merchant.getId(), userId)
                     .orElseThrow(() -> new RuntimeException("User not found: " + userId));
 
             BigDecimal balanceBefore = lockedUser.getBalance();
@@ -131,7 +133,7 @@ public class WalletService {
             lockedUser.setBalance(BigDecimal.ZERO);
             user = userRepository.save(lockedUser);
 
-            createTransaction(user, TransactionType.WITHDRAW, withdrawAmount, balanceBefore,
+            createTransaction(user, merchant, TransactionType.WITHDRAW, withdrawAmount, balanceBefore,
                     BigDecimal.ZERO, "Withdraw all balance", null);
         } finally {
             redisLock.releaseLock(lockKey, lockValue);
@@ -139,12 +141,13 @@ public class WalletService {
         return user;
     }
 
-    public void createTransaction(User user, TransactionType type, BigDecimal amount,
-                                   BigDecimal balanceBefore, BigDecimal balanceAfter,
-                                   String description, Bet bet) {
+    public void createTransaction(User user, Merchant merchant, TransactionType type, BigDecimal amount,
+                                  BigDecimal balanceBefore, BigDecimal balanceAfter,
+                                  String description, Bet bet) {
         // 使用异步消息记录交易，提高性能
         TransactionMessage message = new TransactionMessage(
                 user.getId(),
+                merchant.getId(),
                 type,
                 amount,
                 balanceBefore,

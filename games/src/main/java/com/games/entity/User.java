@@ -17,6 +17,10 @@ public class User {
     @Id
     private Long id;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "merchant_id", nullable = false)
+    private Merchant merchant;
+
     @Column(unique = true, nullable = false, length = 50)
     private String username;
 

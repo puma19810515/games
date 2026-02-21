@@ -4,9 +4,11 @@ import com.games.config.SnowflakeIdGenerator;
 import com.games.constant.RocketMQConstant;
 import com.games.dto.TransactionMessage;
 import com.games.entity.Bet;
+import com.games.entity.Merchant;
 import com.games.entity.Transaction;
 import com.games.entity.User;
 import com.games.repository.BetRepository;
+import com.games.repository.MerchantRepository;
 import com.games.repository.TransactionRepository;
 import com.games.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -25,6 +27,7 @@ import org.springframework.stereotype.Component;
 )
 public class TransactionMessageConsumer implements RocketMQListener<TransactionMessage> {
 
+    private final MerchantRepository merchantRepository;
     private final TransactionRepository transactionRepository;
     private final UserRepository userRepository;
     private final BetRepository betRepository;
@@ -33,11 +36,14 @@ public class TransactionMessageConsumer implements RocketMQListener<TransactionM
     @Override
     public void onMessage(TransactionMessage message) {
         try {
-            log.info("Processing transaction message: userId={}, type={}, amount={}",
-                    message.getUserId(), message.getType(), message.getAmount());
+            log.info("Processing transaction message: merchantId={}, userId={}, type={}, amount={}",
+                    message.getMerchantId(), message.getUserId(), message.getType(), message.getAmount());
 
             User user = userRepository.findById(message.getUserId())
                     .orElseThrow(() -> new RuntimeException("User not found: " + message.getUserId()));
+
+            Merchant merchant = merchantRepository.findById(message.getMerchantId())
+                    .orElseThrow(() -> new RuntimeException("Merchant not found: " + message.getMerchantId()));
 
             Bet bet = null;
             if (message.getBetId() != null) {
@@ -46,6 +52,7 @@ public class TransactionMessageConsumer implements RocketMQListener<TransactionM
 
             Transaction transaction = new Transaction();
             transaction.setId(idGenerator.nextId());
+            transaction.setMerchant(merchant);
             transaction.setUser(user);
             transaction.setType(message.getType());
             transaction.setAmount(message.getAmount());

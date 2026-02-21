@@ -4,27 +4,27 @@ spring:
   # 主从数据源配置 - 实现读写分离
   # 注意：如果没有配置 MySQL 主从复制，主从库暂时指向同一个数据库
   datasource:
-    # 主库配置 - 处理所有写操作（INSERT, UPDATE, DELETE）
+    # 主库配置 - 写操作
     master:
-      jdbc-url: jdbc:mysql://localhost:3306/taskdb?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
-      username: taskuser
-      password: taskpass
-      driver-class-name: com.mysql.cj.jdbc.Driver
+      jdbc-url: jdbc:postgresql://ep-green-snow-a1hvyx4e-pooler.ap-southeast-1.aws.neon.tech:5432/neondb?sslmode=require&channel_binding=require
+      username: neondb_owner
+      password: npg_rvi4syEgn7qU
+      driver-class-name: org.postgresql.Driver
       hikari:
-        maximum-pool-size: 200  # 主库连接池：200（写操作较少但重要）
+        maximum-pool-size: 200
         minimum-idle: 30
         connection-timeout: 3000
         idle-timeout: 300000
         pool-name: MasterHikariPool
-    # 从库配置 - 处理所有读操作（SELECT）
-    # TODO: 配置 MySQL 主从复制后，修改为实际的从库地址 localhost:3307
+
+    # 从库配置 - 读操作
     slave:
-      jdbc-url: jdbc:mysql://localhost:3306/taskdb?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
-      username: taskuser
-      password: taskpass
-      driver-class-name: com.mysql.cj.jdbc.Driver
+      jdbc-url: jdbc:postgresql://ep-green-snow-a1hvyx4e-pooler.ap-southeast-1.aws.neon.tech:5432/neondb?sslmode=require&channel_binding=require
+      username: neondb_owner
+      password: npg_rvi4syEgn7qU
+      driver-class-name: org.postgresql.Driver
       hikari:
-        maximum-pool-size: 300  # 从库连接池：300（读操作更多）
+        maximum-pool-size: 300
         minimum-idle: 50
         connection-timeout: 3000
         idle-timeout: 300000
@@ -35,28 +35,30 @@ spring:
     show-sql: true
     properties:
       hibernate:
-        dialect: org.hibernate.dialect.MySQLDialect
+        dialect: org.hibernate.dialect.PostgreSQLDialect
         format_sql: true
   data:
     redis:
-      host: localhost
+      host: sweet-sloth-56657.upstash.io
       port: 6379
-      password:
+      username: default
+      password: Ad1RAAIncDIxN2UyMDIzYTgyNTU0ZDRhODhiZmI4YWE1ZDk1YTg4MnAyNTY2NTc
       database: 0
       timeout: 3000ms
-      jedis:
+      ssl:
+        enabled: true   # 🔥 Upstash 必須開
+      lettuce:
         pool:
           max-active: 100
           max-idle: 50
           min-idle: 20
           max-wait: 1000ms
-
 server:
   port: 8080
   machine-id: 1
 
 jwt:
-  secret: SlotSuperSecretKeyForJWTTokenGenerationPumaMustBeAtLeast256BitsLong123456789
+  secret: GamesSuperSecretKeyForJWTTokenGenerationPumaMustBeAtLeast256BitsLong123456789
   expiration: 86400000 # 24 hours in milliseconds
 
 # 會員註冊時的初始餘額設定

@@ -6,9 +6,11 @@ import com.games.constant.RedisConstant;
 import com.games.dto.AuthResponse;
 import com.games.dto.LoginRequest;
 import com.games.dto.RegisterRequest;
+import com.games.entity.Merchant;
 import com.games.entity.User;
 import com.games.enums.TransactionType;
 import com.games.lock.RedisLock;
+import com.games.repository.MerchantRepository;
 import com.games.repository.UserRepository;
 import com.games.util.JwtUtil;
 import lombok.RequiredArgsConstructor;
@@ -31,6 +33,7 @@ public class AuthService {
     @Value("${register.initial-balance}")
     private BigDecimal registerInitialBalance;
 
+    private final MerchantRepository merchantRepository;
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
@@ -39,11 +42,11 @@ public class AuthService {
     private final SnowflakeIdGenerator idGenerator;
     private final RedisLock redisLock;
 
-    public AuthResponse register(RegisterRequest request) {
+    public AuthResponse register(RegisterRequest request, Merchant merchant) {
         log.info("Registering new user: {}", request.getUsername());
 
-        String lockKey = GlobeConstant.USER + GlobeConstant.SEMICOLON
-                + RedisConstant.REGISTER + request.getUsername();
+        String lockKey = GlobeConstant.USER + GlobeConstant.SEMICOLON + merchant.getApiKey()
+                + GlobeConstant.SEMICOLON + RedisConstant.REGISTER + request.getUsername();
         String lockValue = UUID.randomUUID().toString();
 
         boolean locked = redisLock.tryLockWithRetry(lockKey,
@@ -57,19 +60,20 @@ public class AuthService {
         User user;
         String token;
         try {
-            if (userRepository.existsByUsername(request.getUsername())) {
-                log.warn("Username already exists: {}", request.getUsername());
+
+            if (userRepository.existsByUsername(merchant.getId(), request.getUsername())) {
+                log.warn("Username already exists: {}, {}", merchant.getId(), request.getUsername());
                 throw new RuntimeException("Username already exists");
             }
 
-            user = createUserWithTransaction(request);
+            user = createUserWithTransaction(merchant, request);
             log.info("User created successfully in database: {}, ID: {}", user.getUsername(), user.getId());
 
             token = jwtUtil.generateToken(user.getUsername());
             log.debug("JWT token generated for user: {}", user.getUsername());
 
             try {
-                tokenService.storeToken(user.getUsername(), token);
+                tokenService.storeToken(merchant.getUsername(), user.getUsername(), token);
                 log.info("Token stored in Redis for user: {}", user.getUsername());
             } catch (Exception e) {
                 log.error("Failed to store token in Redis for user: {}", user.getUsername(), e);
@@ -78,17 +82,17 @@ public class AuthService {
         } finally {
             redisLock.releaseLock(lockKey, lockValue);
         }
-
         log.info("User registration completed successfully: {}", user.getUsername());
         return new AuthResponse(token, user.getUsername(), user.getBalance());
     }
 
     @Transactional
-    protected User createUserWithTransaction(RegisterRequest request) {
+    protected User createUserWithTransaction(Merchant merchant, RegisterRequest request) {
         log.debug("Creating user with transaction: {}", request.getUsername());
 
         User user = new User();
         user.setId(idGenerator.nextId());
+        user.setMerchant(merchant);
         user.setUsername(request.getUsername());
         user.setPassword(passwordEncoder.encode(request.getPassword()));
         user.setBalance(registerInitialBalance);
@@ -96,15 +100,15 @@ public class AuthService {
         user = userRepository.save(user);
         log.debug("User saved to database: ID={}, username={}", user.getId(), user.getUsername());
 
-        walletService.createTransaction(user, TransactionType.REGISTER, registerInitialBalance,
+        walletService.createTransaction(user, merchant, TransactionType.REGISTER, registerInitialBalance,
                 BigDecimal.ZERO, registerInitialBalance, "Initial balance on registration", null);
         log.debug("Initial transaction created for user: {}", user.getUsername());
 
         return user;
     }
 
-    public AuthResponse login(LoginRequest request) {
-        User user = userRepository.findByUsername(request.getUsername())
+    public AuthResponse login(LoginRequest request, Merchant merchant) {
+        User user = userRepository.findByUsername(merchant.getId(), request.getUsername())
                 .orElseThrow(() -> new RuntimeException("Invalid username or password"));
 
         if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
@@ -114,7 +118,7 @@ public class AuthService {
         String token = jwtUtil.generateToken(user.getUsername());
 
         try {
-            tokenService.storeToken(user.getUsername(), token);
+            tokenService.storeToken(merchant.getUsername(), user.getUsername(), token);
         } catch (Exception e) {
             throw new RuntimeException("Failed to store token in Redis: " + e.getMessage(), e);
         }
@@ -122,12 +126,12 @@ public class AuthService {
         return new AuthResponse(token, user.getUsername(), user.getBalance());
     }
 
-    public User getUserByUsername(String username) {
-        return userRepository.findByUsername(username)
+    public User getUserByUsername(Long merchantId, String username) {
+        return userRepository.findByUsername(merchantId, username)
                 .orElseThrow(() -> new RuntimeException("User not found"));
     }
 
-    public void logout(String username) {
-        tokenService.removeToken(username);
+    public void logout(String merUsername, String username) {
+        tokenService.removeToken(merUsername, username);
     }
 }

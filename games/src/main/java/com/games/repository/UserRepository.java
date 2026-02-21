@@ -17,13 +17,15 @@ public interface UserRepository extends JpaRepository<User, Long> {
      * 根据用户名查询用户 - 使用从库
      */
     @ReadOnly
-    Optional<User> findByUsername(String username);
+    @Query("SELECT u FROM User u WHERE u.merchant.id = :merId AND u.username = :username")
+    Optional<User> findByUsername(@Param("merId") Long merchantId, @Param("username") String username);
 
     /**
      * 检查用户名是否存在 - 使用从库
      */
     @ReadOnly
-    boolean existsByUsername(String username);
+    @Query("SELECT COUNT(1) > 0 FROM User u WHERE u.merchant.id = :merId AND u.username = :username")
+    boolean existsByUsername(@Param("merId") Long merchantId, @Param("username") String username);
 
     /**
      * 使用悲观锁查询用户（SELECT FOR UPDATE）- 必须使用主库
@@ -36,6 +38,6 @@ public interface UserRepository extends JpaRepository<User, Long> {
      * @return 用户实体（带锁）
      */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("SELECT u FROM User u WHERE u.id = :id")
-    Optional<User> findByIdWithLock(@Param("id") Long id);
+    @Query("SELECT u FROM User u WHERE u.merchant.id = :merId AND u.id = :id")
+    Optional<User> findByIdWithLock(@Param("merId") Long merchantId, @Param("id") Long id);
 }

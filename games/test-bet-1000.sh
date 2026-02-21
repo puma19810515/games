@@ -25,8 +25,9 @@ fi
 
 # 配置參數
 BASE_URL="http://localhost:8080"
-USERNAME="puma"
+USERNAME="puma1"
 PASSWORD="1qaz2wsx"
+MERCHANT_KEY="s4vLDyaWvXAv8EyQckKt2UPBD5JC6Jsz"
 BET_AMOUNT=100
 TEST_COUNT=1000
 
@@ -34,6 +35,7 @@ TEST_COUNT=1000
 echo -e "${YELLOW}🔑 正在登入...${NC}"
 LOGIN_RESPONSE=$(curl -s -X POST "$BASE_URL/api/auth/login" \
   -H "Content-Type: application/json" \
+  -H "X-API-KEY: $MERCHANT_KEY" \
   -d "{\"username\":\"$USERNAME\",\"password\":\"$PASSWORD\"}")
 
 TOKEN=$(echo "$LOGIN_RESPONSE" | jq -r '.data.token')
@@ -87,6 +89,7 @@ SYMBOL_STATS_FILE=$(mktemp)
 for i in $(seq 1 $TEST_COUNT); do
   SPIN_RESPONSE=$(curl -s -X POST "$BASE_URL/api/game/spin/0000" \
     -H "Authorization: Bearer $TOKEN" \
+    -H "X-API-KEY: $MERCHANT_KEY" \
     -H "Content-Type: application/json" \
     -d "{\"amount\":$BET_AMOUNT}")
 
@@ -216,6 +219,7 @@ echo ""
 
 # 最終餘額
 FINAL_BALANCE=$(curl -s -X GET "$BASE_URL/api/game/balance" \
+  -H "X-API-KEY: $MERCHANT_KEY" \
   -H "Authorization: Bearer $TOKEN" | jq -r '.data.balance')
 
 echo -e "${CYAN}餘額變化：${NC}"

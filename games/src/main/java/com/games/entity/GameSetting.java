@@ -1,6 +1,5 @@
 package com.games.entity;
 
-
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
@@ -16,8 +15,8 @@ import java.time.LocalDateTime;
                 @UniqueConstraint(name = "uk_game_code", columnNames = "game_code")
         },
         indexes = {
-                @Index(name = "idx_game_code", columnList = "game_code"),
-                @Index(name = "idx_created_at", columnList = "created_at")
+                @Index(name = "idx_game_setting_game_code", columnList = "game_code"),
+                @Index(name = "idx_game_setting_created_at", columnList = "created_at")
         })
 @Data
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
@@ -27,10 +26,10 @@ public class GameSetting {
     @Id
     private Long id;
 
-    @Column(name = "game_code", nullable = false)
+    @Column(name = "game_code", nullable = false, length = 10)
     private String gameCode;
 
-    @Column(name = "name", nullable = false)
+    @Column(name = "name", nullable = false, length = 100)
     private String name;
 
     /**
@@ -51,8 +50,7 @@ public class GameSetting {
     @Column(name = "rtp_set", nullable = false, scale = 2)
     private Double rtpSet;
 
-    @Lob
-    @Column(name = "game_settings", nullable = false, columnDefinition = "TEXT")
+    @Column(name = "game_settings", columnDefinition = "jsonb")
     private String gameSettings;
 
     @Column(name = "two_match_multiplier", nullable = false, precision = 15, scale = 2)

@@ -1,5 +1,6 @@
 package com.games.service;
 
+import com.games.constant.GlobeConstant;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.RedisTemplate;
@@ -24,19 +25,19 @@ public class TokenService {
 
     private static final String TOKEN_PREFIX = "token:";
 
-    public void storeToken(String username, String token) {
-        String key = TOKEN_PREFIX + username;
+    public void storeToken(String merUsername, String username, String token) {
+        String key = TOKEN_PREFIX + merUsername + username;
         redisTemplate.opsForValue().set(key, token, expiration, TimeUnit.MILLISECONDS);
     }
 
-    public boolean validateToken(String username, String token) {
-        String key = TOKEN_PREFIX + username;
+    public boolean validateToken(String merUsername, String username, String token) {
+        String key = TOKEN_PREFIX + merUsername + username;
         Object storedToken = redisTemplate.opsForValue().get(key);
         return token.equals(storedToken);
     }
 
-    public void removeToken(String username) {
-        String key = TOKEN_PREFIX + username;
+    public void removeToken(String merUsername, String username) {
+        String key = TOKEN_PREFIX + merUsername + username;
         redisTemplate.delete(key);
     }
 

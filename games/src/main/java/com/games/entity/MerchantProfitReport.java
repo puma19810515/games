@@ -4,15 +4,20 @@ import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "bets")
+@Table(name = "merchants_profit_report",
+        indexes = {
+                @Index(name = "idx_merchant_profit_id", columnList = "merchant_id"),
+                @Index(name = "idx_merchant_profit_created_at", columnList = "created_at")
+        })
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class Bet {
+public class MerchantProfitReport {
 
     @Id
     private Long id;
@@ -21,24 +26,14 @@ public class Bet {
     @JoinColumn(name = "merchant_id", nullable = false)
     private Merchant merchant;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "user_id", nullable = false)
-    private User user;
+    @Column(name = "total_balance", nullable = false, precision = 15, scale = 2)
+    private BigDecimal totalBalance = BigDecimal.ZERO;
 
-    @Column(nullable = false, precision = 15, scale = 2)
-    private BigDecimal betAmount;
+    @Column(name = "settle_status", nullable = false)
+    private Integer settleStatus = 0;
 
-    @Column(nullable = false, precision = 15, scale = 2)
-    private BigDecimal winAmount;
-
-    @Column(nullable = false, length = 500)
-    private String result;
-
-    @Column(nullable = false)
-    private Boolean isWin;
-
-    @Column(name = "game_code", nullable = false, length = 10)
-    private String gameCode;
+    @Column(length = 255)
+    private String description;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -47,4 +42,5 @@ public class Bet {
     protected void onCreate() {
         createdAt = LocalDateTime.now();
     }
+
 }

@@ -51,18 +51,20 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 unauthorized(response, "Missing X-API-KEY header");
                 return;
             }
-            String authHeader = request.getHeader("Authorization");
             Merchant merchant = merchantRepository.findByApiKey(apiKey);
+            if (merchant == null) {
+                unauthorized(response, "Invalid API key");
+                return;
+            }
+            String authHeader = request.getHeader("Authorization");
             if (authHeader != null && authHeader.startsWith("Bearer ")) {
                 String token = authHeader.substring(7);
                 if (jwtUtil.validateToken(token)) {
                     String username = jwtUtil.getUsernameFromToken(token);
-
                     if (tokenService.validateToken(merchant.getUsername(), username, token)) {
                         UsernamePasswordAuthenticationToken authentication =
                                 new UsernamePasswordAuthenticationToken(username, null, new ArrayList<>());
                         authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-
                         SecurityContextHolder.getContext().setAuthentication(authentication);
                     }
                 }

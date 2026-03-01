@@ -108,8 +108,16 @@ public class SportBetController {
             Authentication authentication,
             @RequestAttribute(name = "merchant", required = false) Merchant merchant) {
         try {
+            if (merchant == null) {
+                return ResponseEntity.badRequest().body(ApiResponse.error("Merchant not found"));
+            }
+
             String username = authentication.getName();
             User user = authService.getUserByUsername(merchant.getId(), username);
+
+            if (user == null) {
+                return ResponseEntity.badRequest().body(ApiResponse.error("User not found"));
+            }
 
             SportBetRecordResponse detail = sportBetService.getBetDetail(user, betId);
             return ResponseEntity.ok(ApiResponse.success(detail));

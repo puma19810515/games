@@ -13,6 +13,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,6 +24,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 /**
@@ -162,7 +165,7 @@ public class SportBetService {
             status = SportBetStatus.valueOf(request.getStatus());
         }
 
-        Page<SportBet> page = sportBetRepository.findByUserIdWithFilters(
+        Page<SportBet> page = this.findByUserIdWithFilters(
                 user.getId(),
                 betType,
                 status,
@@ -182,6 +185,35 @@ public class SportBetService {
                 .total(page.getTotalElements())
                 .totalPages(page.getTotalPages())
                 .build();
+    }
+
+    public Page<SportBet> findByUserIdWithFilters(Long userId, SportBetType betType,
+                                                  SportBetStatus status, LocalDateTime startTime,
+                                                  LocalDateTime endTime, Pageable pageable) {
+
+        Specification<SportBet> spec = (root, query, cb) -> {
+            List<jakarta.persistence.criteria.Predicate> predicates = new ArrayList<>();
+
+            predicates.add(cb.equal(root.get("user").get("id"), userId));
+
+            if (betType != null) {
+                predicates.add(cb.equal(root.get("betType"), betType));
+            }
+            if (status != null) {
+                predicates.add(cb.equal(root.get("status"), status));
+            }
+            if (startTime != null) {
+                predicates.add(cb.greaterThanOrEqualTo(root.get("placedAt"), startTime));
+            }
+            if (endTime != null) {
+                predicates.add(cb.lessThanOrEqualTo(root.get("placedAt"), endTime));
+            }
+
+            query.orderBy(cb.desc(root.get("placedAt")));
+            return cb.and(predicates.toArray(new jakarta.persistence.criteria.Predicate[0]));
+        };
+
+        return sportBetRepository.findAll(spec, pageable);
     }
 
     /**
@@ -345,6 +377,8 @@ public class SportBetService {
                             "盤口不存在: " + legReq.getMarketLineId()));
 
             if (!marketLine.getEvent().getId().equals(event.getId())) {
+                log.info("盤口 {} 賽事ID {} 與投注腿賽事ID {} 不匹配",
+                        marketLine.getId(), marketLine.getEvent().getId(), event.getId());
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "盤口與賽事不匹配");
             }
 

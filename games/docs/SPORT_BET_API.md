@@ -184,11 +184,6 @@ Content-Type: application/json
       "selection": "HOME"
     },
     {
-      "eventId": 2,
-      "marketLineId": 15,
-      "selection": "OVER"
-    },
-    {
       "eventId": 3,
       "marketLineId": 25,
       "selection": "AWAY"
@@ -200,25 +195,25 @@ Content-Type: application/json
 **響應範例：**
 ```json
 {
-  "code": 200,
-  "message": "success",
+  "success": true,
+  "message": "Success",
   "data": {
-    "betId": 10001,
+    "betId": 2,
     "betType": "PARLAY",
     "stake": 50.00,
-    "totalOdds": 5.6875,
-    "potentialWin": 284.375,
+    "totalOdds": 4.0850,
+    "potentialWin": 204.2500,
     "status": "PENDING",
-    "placedAt": "2026-03-01T15:30:00",
-    "balanceAfter": 950.00,
+    "placedAt": "2026-03-01T14:57:02.607853",
+    "balanceAfter": 250.00,
     "legs": [
       {
-        "legId": 1,
+        "legId": 2,
         "eventId": 1,
         "eventName": "曼徹斯特聯 vs 曼徹斯特城",
         "leagueName": "英格蘭超級聯賽",
         "sportTypeName": "足球",
-        "startTime": "2026-03-01T20:00:00",
+        "startTime": "2026-03-06T04:00:00",
         "marketLineId": 3,
         "betTypeCode": "AH",
         "betTypeName": "亞洲讓球",
@@ -226,8 +221,26 @@ Content-Type: application/json
         "selection": "HOME",
         "selectionDisplay": "曼徹斯特聯",
         "handicap": -0.50,
-        "odds": 1.15,
-        "oddsDecimal": 2.15,
+        "odds": 1.1500,
+        "oddsDecimal": 2.1500,
+        "result": "PENDING"
+      },
+      {
+        "legId": 3,
+        "eventId": 3,
+        "eventName": "洛杉磯湖人 vs 金州勇士",
+        "leagueName": "美國職業籃球聯賽",
+        "sportTypeName": "籃球",
+        "startTime": "2026-03-05T11:00:00",
+        "marketLineId": 25,
+        "betTypeCode": "AH",
+        "betTypeName": "亞洲讓球",
+        "oddsFormatCode": "ASIAN",
+        "selection": "AWAY",
+        "selectionDisplay": "金州勇士",
+        "handicap": -6.50,
+        "odds": 0.9000,
+        "oddsDecimal": 1.9000,
         "result": "PENDING"
       }
     ]

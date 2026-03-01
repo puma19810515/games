@@ -65,8 +65,6 @@ public class HeaderLoggingFilter extends OncePerRequestFilter {
             log.error("Error validating API key", ex);
             unauthorized(response, "API key validation error");
         }
-
-        filterChain.doFilter(request, response);
     }
 
     private Merchant findMerchantByApiKey(String apiKey) {

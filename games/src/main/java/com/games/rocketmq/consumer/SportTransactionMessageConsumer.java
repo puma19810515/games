@@ -1,6 +1,5 @@
 package com.games.rocketmq.consumer;
 
-import com.games.config.SnowflakeIdGenerator;
 import com.games.constant.RocketMQConstant;
 import com.games.dto.SportTransactionMessage;
 import com.games.entity.*;

@@ -154,7 +154,8 @@ public class GamesWalletService {
                 balanceBefore,
                 balanceAfter,
                 description,
-                bet != null ? bet.getId() : null
+                bet != null ? bet.getId() : null,
+                java.time.LocalDateTime.now()
         );
         messageProducerService.sendTransactionMessage(message);
         log.debug("Transaction message sent for user: {}, type: {}", user.getId(), type);

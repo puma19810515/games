@@ -7,6 +7,7 @@ import lombok.NoArgsConstructor;
 
 import java.io.Serializable;
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 
 @Data
 @NoArgsConstructor
@@ -22,4 +23,5 @@ public class TransactionMessage implements Serializable {
     private BigDecimal balanceAfter;
     private String description;
     private Long betId;
+    private LocalDateTime timestamp;
 }

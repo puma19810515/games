@@ -60,7 +60,8 @@ public class GameController {
 
             Map<String, Object> data = new HashMap<>();
             data.put("username", user.getUsername());
-            data.put("balance", user.getBalance());
+            data.put("gameBalance", user.getGameBalance());
+            data.put("sportBalance", user.getSportBalance());
 
             return ResponseEntity.ok(ApiResponse.success(data));
         } catch (Exception e) {
@@ -70,8 +71,7 @@ public class GameController {
 
     @PostMapping("/records")
     public ResponseEntity<ApiResponse<PageDataResUtil<BetRecordsResponse>>> getRecords(Authentication authentication,
-                                                                                       @RequestBody BetRecordsRequest request,
-                                                                                       @RequestAttribute(name = "merchant", required = false) Merchant merchant) {
+                                                                                       @RequestBody BetRecordsRequest request, @RequestAttribute(name = "merchant", required = false) Merchant merchant) {
         try {
             String username = authentication.getName();
             User user = authService.getUserByUsername(merchant.getId(), username);
@@ -83,4 +83,5 @@ public class GameController {
             return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
         }
     }
+
 }

@@ -28,7 +28,10 @@ public class User {
     private String password;
 
     @Column(nullable = false, precision = 15, scale = 2)
-    private BigDecimal balance = BigDecimal.ZERO;
+    private BigDecimal gameBalance = BigDecimal.ZERO;
+
+    @Column(nullable = false, precision = 15, scale = 2)
+    private BigDecimal sportBalance = BigDecimal.ZERO;
 
     @Version
     @Column(nullable = false)

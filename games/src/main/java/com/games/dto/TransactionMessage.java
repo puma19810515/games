@@ -1,6 +1,5 @@
 package com.games.dto;
 
-import com.games.entity.Merchant;
 import com.games.enums.TransactionType;
 import lombok.AllArgsConstructor;
 import lombok.Data;

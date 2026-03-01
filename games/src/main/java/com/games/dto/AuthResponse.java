@@ -9,5 +9,6 @@ import java.math.BigDecimal;
 public class AuthResponse {
     private String token;
     private String username;
-    private BigDecimal balance;
+    private BigDecimal gameBalance;
+    private BigDecimal sportBalance;
 }

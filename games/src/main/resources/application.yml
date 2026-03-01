@@ -8,7 +8,7 @@ spring:
     master:
       jdbc-url: jdbc:postgresql://ep-green-snow-a1hvyx4e-pooler.ap-southeast-1.aws.neon.tech:5432/neondb?sslmode=require&channel_binding=require
       username: neondb_owner
-      password: npg_rvi4syEgn7qU
+      password: ${DB_PASSWORD:ENC(LG9IQBA0kcin4Bbbg1WSpOvaRV/jCdLg+5YQKpW8yBsVL+sl6PvpRX8mAGsZhihJXPvgPpPMzI3xu8CKuRUm4Q==)}
       driver-class-name: org.postgresql.Driver
       hikari:
         maximum-pool-size: 200
@@ -21,7 +21,7 @@ spring:
     slave:
       jdbc-url: jdbc:postgresql://ep-green-snow-a1hvyx4e-pooler.ap-southeast-1.aws.neon.tech:5432/neondb?sslmode=require&channel_binding=require
       username: neondb_owner
-      password: npg_rvi4syEgn7qU
+      password: ${DB_PASSWORD:ENC(LG9IQBA0kcin4Bbbg1WSpOvaRV/jCdLg+5YQKpW8yBsVL+sl6PvpRX8mAGsZhihJXPvgPpPMzI3xu8CKuRUm4Q==)}
       driver-class-name: org.postgresql.Driver
       hikari:
         maximum-pool-size: 300
@@ -42,7 +42,7 @@ spring:
       host: sweet-sloth-56657.upstash.io
       port: 6379
       username: default
-      password: Ad1RAAIncDIxN2UyMDIzYTgyNTU0ZDRhODhiZmI4YWE1ZDk1YTg4MnAyNTY2NTc
+      password: ${REDIS_PASSWORD:ENC(UpFVasnn6PJ2lOAJgcG5xuqqrr1KYYq6iUaHYLTEfX0cvs/EKHeXY/WG3TMURzWbROR09CwapCOGDDA+wuCgFFKtfAyAZ3H9imgR1Qqt/bE+b+0l3sEiGnIS+WgxdHDR)}
       database: 0
       timeout: 3000ms
       ssl:
@@ -53,30 +53,41 @@ spring:
           max-idle: 50
           min-idle: 20
           max-wait: 1000ms
+
+# Jasypt 加密配置
+# 啟動時需設定環境變數: JASYPT_ENCRYPTOR_PASSWORD=你的加密密鑰
+# 或使用 JVM 參數: -Djasypt.encryptor.password=你的加密密鑰
+jasypt:
+  encryptor:
+    bean: jasyptStringEncryptor
 server:
   port: 8080
   machine-id: 1
 
 jwt:
-  secret: GamesSuperSecretKeyForJWTTokenGenerationPumaMustBeAtLeast256BitsLong123456789
+  secret: ${JWT_SECRET:ENC(cNXSyWjlh1/fLaYZXOc9jciCzU2tiT4+vcdoT8qh+ZfkBCeCG+hybXxqFgCYdri03glBQ+sFrRqMe3btE9LvWbAQdtZOHb6CCHKpWjJ7cmdIzX/2tseSepBNEkYjv2rnkNk7JvGg//9GIa89tb02Tg==)}
   expiration: 86400000 # 24 hours in milliseconds
 
 # 會員註冊時的初始餘額設定
 register:
-  initial-balance: 100000
+  games-initial-balance: 50
+  sport-initial-balance: 1000
 
 # RocketMQ Configuration
 rocketmq:
   name-server: localhost:9876
   producer:
-    group: slot-game-producer
+    group: games-producer
     send-message-timeout: 3000
     compress-message-body-threshold: 4096
     max-message-size: 4194304
     retry-times-when-send-failed: 2
     retry-times-when-send-async-failed: 2
   consumer:
-    group: slot-game-consumer
+    group: games-consumer
+    transaction-group: games-transaction-consumer
+    sport-transaction-group: sport-transaction-consumer
+    rtp-group: rtp-consumer
 
 # Resilience4j Rate Limiter Configuration
 resilience4j:
@@ -86,11 +97,23 @@ resilience4j:
         limit-for-period: 10  # 每個時間窗口允許10個請求
         limit-refresh-period: 1s  # 時間窗口1秒
         timeout-duration: 0s  # 不等待，立即返回
-      deposit:
+      gamesDeposit:
         limit-for-period: 5
         limit-refresh-period: 1s
         timeout-duration: 0s
-      withdraw:
+      gamesWithdraw:
+        limit-for-period: 3
+        limit-refresh-period: 1s
+        timeout-duration: 0s
+      oddsFormatUpdateStatus:
+        limit-for-period: 3
+        limit-refresh-period: 1s
+        timeout-duration: 0s
+      sportDeposit:
+        limit-for-period: 5
+        limit-refresh-period: 1s
+        timeout-duration: 0s
+      sportWithdraw:
         limit-for-period: 3
         limit-refresh-period: 1s
         timeout-duration: 0s

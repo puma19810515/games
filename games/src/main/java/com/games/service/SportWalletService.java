@@ -2,13 +2,12 @@ package com.games.service;
 
 import com.games.constant.GlobeConstant;
 import com.games.constant.RedisConstant;
-import com.games.dto.TransactionMessage;
-import com.games.entity.Bet;
+import com.games.dto.SportTransactionMessage;
 import com.games.entity.Merchant;
+import com.games.entity.SportBet;
 import com.games.entity.User;
-import com.games.enums.TransactionType;
+import com.games.enums.SportTransactionType;
 import com.games.lock.RedisLock;
-import com.games.repository.MerchantRepository;
 import com.games.repository.UserRepository;
 import com.games.rocketmq.producer.MessageProducerService;
 import lombok.RequiredArgsConstructor;
@@ -21,55 +20,37 @@ import org.springframework.web.server.ResponseStatusException;
 import java.math.BigDecimal;
 import java.util.UUID;
 
-@Slf4j
 @Service
 @RequiredArgsConstructor
-public class WalletService {
+@Slf4j
+public class SportWalletService {
 
     private final UserRepository userRepository;
     private final MessageProducerService messageProducerService;
     private final RedisLock redisLock;
 
-    /**
-     * 扣除余额
-     * 注意：此方法应该在已有事务中调用，不开启新事务
-     * 传入的 user 对象应该已经通过悲观锁获取
-     */
-    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.MANDATORY)
-    public void deductBalance(Merchant merchant, User user, BigDecimal amount, Bet bet, String description) {
-        BigDecimal balanceBefore = user.getBalance();
-        BigDecimal newBalance = balanceBefore.subtract(amount);
-
-        if (newBalance.compareTo(BigDecimal.ZERO) < 0) {
-            throw new RuntimeException("Insufficient balance");
-        }
-
-        user.setBalance(newBalance);
-        userRepository.save(user);
-
-        createTransaction(user, merchant, TransactionType.BET, amount, balanceBefore, newBalance, description, bet);
-    }
-
-    /**
-     * 增加余额
-     * 注意：此方法应该在已有事务中调用，不开启新事务
-     * 传入的 user 对象应该已经通过悲观锁获取
-     */
-    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.MANDATORY)
-    public void addBalance(Merchant merchant, User user, BigDecimal amount, Bet bet, String description) {
-        BigDecimal balanceBefore = user.getBalance();
-        BigDecimal newBalance = balanceBefore.add(amount);
-
-        user.setBalance(newBalance);
-        userRepository.save(user);
-
-        createTransaction(user, merchant, TransactionType.WIN, amount, balanceBefore, newBalance, description, bet);
+    public void createSportTransaction(User user, Merchant merchant,
+                                       SportTransactionType type, BigDecimal amount, BigDecimal balanceBefore,
+                                       BigDecimal balanceAfter, String description, SportBet sportBet) {
+        SportTransactionMessage message = SportTransactionMessage.builder()
+                .sportBetId(sportBet != null ? sportBet.getId() : null)
+                .userId(user.getId())
+                .merchantId(merchant.getId())
+                .type(type.name())
+                .amount(amount)
+                .balanceBefore(balanceBefore)
+                .balanceAfter(balanceAfter)
+                .description(description)
+                .timestamp(java.time.LocalDateTime.now())
+                .build();
+        messageProducerService.sendSportTransactionMessage(message);
+        log.debug("Sport transaction message sent for user: {}, type: {}", user.getId(), type);
     }
 
     @Transactional
     public User deposit(Merchant merchant, User user, BigDecimal amount) {
         final Long userId = user.getId();  // 保存到 final 变量
-        log.info("Deposit new user: {}, amount:{}", userId, amount);
+        log.info("Sport Deposit new user: {}, amount:{}", userId, amount);
 
         String lockKey = GlobeConstant.USER + GlobeConstant.SEMICOLON + merchant.getApiKey()
                 + GlobeConstant.SEMICOLON + RedisConstant.DEPOSIT + userId;
@@ -88,14 +69,14 @@ public class WalletService {
             User lockedUser = userRepository.findByIdWithLock(merchant.getId(), userId)
                     .orElseThrow(() -> new RuntimeException("User not found: " + userId));
 
-            BigDecimal balanceBefore = lockedUser.getBalance();
+            BigDecimal balanceBefore = lockedUser.getSportBalance();
             BigDecimal newBalance = balanceBefore.add(amount);
 
-            lockedUser.setBalance(newBalance);
+            lockedUser.setGameBalance(newBalance);
             user = userRepository.save(lockedUser);
 
-            createTransaction(user, merchant, TransactionType.DEPOSIT, amount, balanceBefore, newBalance,
-                    "Deposit to wallet", null);
+            createSportTransaction(user, merchant, SportTransactionType.SPORT_DEPOSIT, amount, balanceBefore, newBalance,
+                    "Sport deposit to wallet", null);
         } finally {
             redisLock.releaseLock(lockKey, lockValue);
         }
@@ -123,39 +104,21 @@ public class WalletService {
             User lockedUser = userRepository.findByIdWithLock(merchant.getId(), userId)
                     .orElseThrow(() -> new RuntimeException("User not found: " + userId));
 
-            BigDecimal balanceBefore = lockedUser.getBalance();
+            BigDecimal balanceBefore = lockedUser.getSportBalance();
 
             if (balanceBefore.compareTo(BigDecimal.ZERO) <= 0) {
                 throw new RuntimeException("No balance to withdraw");
             }
 
             BigDecimal withdrawAmount = balanceBefore;
-            lockedUser.setBalance(BigDecimal.ZERO);
+            lockedUser.setSportBalance(BigDecimal.ZERO);
             user = userRepository.save(lockedUser);
 
-            createTransaction(user, merchant, TransactionType.WITHDRAW, withdrawAmount, balanceBefore,
-                    BigDecimal.ZERO, "Withdraw all balance", null);
+            createSportTransaction(user, merchant, SportTransactionType.SPORT_WITHDRAW, withdrawAmount, balanceBefore,
+                    BigDecimal.ZERO, "Sport withdraw all balance", null);
         } finally {
             redisLock.releaseLock(lockKey, lockValue);
         }
         return user;
-    }
-
-    public void createTransaction(User user, Merchant merchant, TransactionType type, BigDecimal amount,
-                                  BigDecimal balanceBefore, BigDecimal balanceAfter,
-                                  String description, Bet bet) {
-        // 使用异步消息记录交易，提高性能
-        TransactionMessage message = new TransactionMessage(
-                user.getId(),
-                merchant.getId(),
-                type,
-                amount,
-                balanceBefore,
-                balanceAfter,
-                description,
-                bet != null ? bet.getId() : null
-        );
-        messageProducerService.sendTransactionMessage(message);
-        log.debug("Transaction message sent for user: {}, type: {}", user.getId(), type);
     }
 }

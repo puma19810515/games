@@ -3,6 +3,9 @@ package com.games.util;
 import java.security.SecureRandom;
 import java.util.Base64;
 
+/**
+ * 產生給商戶使用放入 Merchant 的 API KEY
+ */
 public class ApiKeyGenerator {
 
     private static final SecureRandom random = new SecureRandom();

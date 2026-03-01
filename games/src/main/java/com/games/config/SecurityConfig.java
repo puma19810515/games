@@ -25,6 +25,9 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers("/api/rtp/**").permitAll()
+                        .requestMatchers("/api/league/**").permitAll()
+                        .requestMatchers("/api/odds-format/**").permitAll()
+                        .requestMatchers("/api/sport-type/**").permitAll()
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);

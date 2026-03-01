@@ -8,9 +8,9 @@ import com.games.dto.LoginRequest;
 import com.games.dto.RegisterRequest;
 import com.games.entity.Merchant;
 import com.games.entity.User;
+import com.games.enums.SportTransactionType;
 import com.games.enums.TransactionType;
 import com.games.lock.RedisLock;
-import com.games.repository.MerchantRepository;
 import com.games.repository.UserRepository;
 import com.games.util.JwtUtil;
 import lombok.RequiredArgsConstructor;
@@ -30,14 +30,17 @@ import java.util.UUID;
 @Slf4j
 public class AuthService {
 
-    @Value("${register.initial-balance}")
-    private BigDecimal registerInitialBalance;
+    @Value("${register.games-initial-balance}")
+    private BigDecimal registerGamesInitialBalance;
 
-    private final MerchantRepository merchantRepository;
+    @Value("${register.sport-initial-balance}")
+    private BigDecimal registerSportInitialBalance;
+
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
-    private final WalletService walletService;
+    private final SportWalletService sportWalletService;;
+    private final GamesWalletService walletService;
     private final TokenService tokenService;
     private final SnowflakeIdGenerator idGenerator;
     private final RedisLock redisLock;
@@ -83,7 +86,8 @@ public class AuthService {
             redisLock.releaseLock(lockKey, lockValue);
         }
         log.info("User registration completed successfully: {}", user.getUsername());
-        return new AuthResponse(token, user.getUsername(), user.getBalance());
+        return new AuthResponse(token, user.getUsername(),
+                user.getGameBalance(), user.getSportBalance());
     }
 
     @Transactional
@@ -95,14 +99,23 @@ public class AuthService {
         user.setMerchant(merchant);
         user.setUsername(request.getUsername());
         user.setPassword(passwordEncoder.encode(request.getPassword()));
-        user.setBalance(registerInitialBalance);
+        user.setGameBalance(registerGamesInitialBalance);
+        user.setSportBalance(registerSportInitialBalance);
 
         user = userRepository.save(user);
         log.debug("User saved to database: ID={}, username={}", user.getId(), user.getUsername());
 
-        walletService.createTransaction(user, merchant, TransactionType.REGISTER, registerInitialBalance,
-                BigDecimal.ZERO, registerInitialBalance, "Initial balance on registration", null);
-        log.debug("Initial transaction created for user: {}", user.getUsername());
+        if (registerGamesInitialBalance.compareTo(BigDecimal.ZERO) > 0) {
+            walletService.createTransaction(user, merchant, TransactionType.REGISTER, registerGamesInitialBalance,
+                    BigDecimal.ZERO, registerGamesInitialBalance,
+                    "Initial balance on registration", null);
+        }
+        if (registerSportInitialBalance.compareTo(BigDecimal.ZERO) > 0) {
+            sportWalletService.createSportTransaction(user, merchant, SportTransactionType.SPORT_REGISTER,
+                    registerSportInitialBalance, BigDecimal.ZERO, registerSportInitialBalance,
+                    "Initial sport balance on registration", null);
+        }
+       log.debug("Initial transaction created for user: {}", user.getUsername());
 
         return user;
     }
@@ -123,7 +136,8 @@ public class AuthService {
             throw new RuntimeException("Failed to store token in Redis: " + e.getMessage(), e);
         }
 
-        return new AuthResponse(token, user.getUsername(), user.getBalance());
+        return new AuthResponse(token, user.getUsername(),
+                user.getGameBalance(), user.getSportBalance());
     }
 
     public User getUserByUsername(Long merchantId, String username) {

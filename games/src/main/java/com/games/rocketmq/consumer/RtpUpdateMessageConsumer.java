@@ -16,11 +16,10 @@ import java.util.concurrent.TimeUnit;
 @RequiredArgsConstructor
 @RocketMQMessageListener(
         topic = RocketMQConstant.RTP_UPDATE_TOPIC,
-        consumerGroup = "${rocketmq.consumer.group}",
+        consumerGroup = "${rocketmq.consumer.rtp-group}",
         selectorExpression = RocketMQConstant.RTP_TAG
 )
-public class
-RtpUpdateMessageConsumer implements RocketMQListener<RtpUpdateMessage> {
+public class RtpUpdateMessageConsumer implements RocketMQListener<RtpUpdateMessage> {
 
     private final RedisTemplate<String, String> redisTemplate;
 
@@ -36,8 +35,10 @@ RtpUpdateMessageConsumer implements RocketMQListener<RtpUpdateMessage> {
                     message.getBetAmount(), message.getWinAmount());
 
             // 更新 Redis 统计数据（原子操作）
-            redisTemplate.opsForValue().increment(RTP_TOTAL_BET_KEY, message.getBetAmount().doubleValue());
-            redisTemplate.opsForValue().increment(RTP_TOTAL_WIN_KEY, message.getWinAmount().doubleValue());
+            redisTemplate.opsForValue().increment(RTP_TOTAL_BET_KEY,
+                    message.getBetAmount() == null ? 0 : message.getBetAmount().doubleValue());
+            redisTemplate.opsForValue().increment(RTP_TOTAL_WIN_KEY,
+                    message.getWinAmount() == null ? 0 : message.getWinAmount().doubleValue());
             redisTemplate.opsForValue().increment(RTP_BET_COUNT_KEY, 1);
 
             // 设置过期时间（30天）

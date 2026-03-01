@@ -7,7 +7,7 @@ import com.games.entity.Merchant;
 import com.games.entity.User;
 import com.games.enums.TransactionType;
 import com.games.service.AuthService;
-import com.games.service.WalletService;
+import com.games.service.GamesWalletService;
 import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -16,16 +16,16 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/api/wallet")
+@RequestMapping("/api/gamesWallet")
 @RequiredArgsConstructor
-public class WalletController {
+public class GamesWalletController {
 
-    private final WalletService walletService;
+    private final GamesWalletService gamesWalletService;
     private final AuthService authService;
 
     @PostMapping("/deposit")
-    @RateLimiter(name = "deposit", fallbackMethod = "depositFallback")
-    public ResponseEntity<ApiResponse<WalletResponse>> deposit(
+    @RateLimiter(name = "gamesDeposit", fallbackMethod = "gamesDepositFallback")
+    public ResponseEntity<ApiResponse<WalletResponse>> gamesDeposit(
             @Valid @RequestBody DepositRequest request,
             Authentication authentication,
             @RequestAttribute(name = "merchant", required = false) Merchant merchant) {
@@ -33,12 +33,12 @@ public class WalletController {
             String username = authentication.getName();
             User user = authService.getUserByUsername(merchant.getId(), username);
 
-            User updatedUser = walletService.deposit(merchant, user, request.getAmount());
+            User updatedUser = gamesWalletService.deposit(merchant, user, request.getAmount());
 
             WalletResponse response = new WalletResponse(
                     updatedUser.getUsername(),
-                    updatedUser.getBalance().subtract(request.getAmount()),
-                    updatedUser.getBalance(),
+                    updatedUser.getGameBalance().subtract(request.getAmount()),
+                    updatedUser.getGameBalance(),
                     request.getAmount(),
                     TransactionType.DEPOSIT,
                     "Deposit successful"
@@ -51,31 +51,30 @@ public class WalletController {
     }
 
     // 存款限流降级方法
-    public ResponseEntity<ApiResponse<WalletResponse>> depositFallback(DepositRequest request, Authentication authentication,
+    public ResponseEntity<ApiResponse<WalletResponse>> gamesDepositFallback(DepositRequest request, Authentication authentication,
                                                                        Merchant merchant, Throwable t) {
         return ResponseEntity.status(429)
                 .body(ApiResponse.error("Too many deposit requests. Please try again later."));
     }
 
     @PostMapping("/withdraw-all")
-    @RateLimiter(name = "withdraw", fallbackMethod = "withdrawAllFallback")
+    @RateLimiter(name = "gamesWithdraw", fallbackMethod = "gamesWithdrawAllFallback")
     public ResponseEntity<ApiResponse<WalletResponse>> withdrawAll(Authentication authentication,
                                                                    @RequestAttribute(name = "merchant", required = false) Merchant merchant) {
         try {
             String username = authentication.getName();
             User user = authService.getUserByUsername(merchant.getId(), username);
 
-            User updatedUser = walletService.withdrawAll(merchant, user);
+            User updatedUser = gamesWalletService.withdrawAll(merchant, user);
 
             WalletResponse response = new WalletResponse(
                     updatedUser.getUsername(),
-                    user.getBalance(),
-                    updatedUser.getBalance(),
-                    user.getBalance(),
+                    user.getGameBalance(),
+                    updatedUser.getGameBalance(),
+                    user.getGameBalance(),
                     TransactionType.WITHDRAW,
                     "Withdraw all successful"
             );
-
             return ResponseEntity.ok(ApiResponse.success("Withdraw all successful", response));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
@@ -83,7 +82,7 @@ public class WalletController {
     }
 
     // 提款限流降级方法
-    public ResponseEntity<ApiResponse<WalletResponse>> withdrawAllFallback(Authentication authentication,
+    public ResponseEntity<ApiResponse<WalletResponse>> gamesWithdrawAllFallback(Authentication authentication,
                                                                            Merchant merchant, Throwable t) {
         return ResponseEntity.status(429)
                 .body(ApiResponse.error("Too many withdraw requests. Please try again later."));

@@ -10,7 +10,6 @@ public class GameProperties {
     private List<String> symbols;
     private BigDecimal minBet;
     private BigDecimal maxBet;
-    private BigDecimal initialBalance;
     private Double targetRtp;
     private LinkedHashMap<String, String> symbolDisplay;
     private LinkedHashMap<String, Double> symbolWeights;

@@ -18,12 +18,11 @@ import com.games.repository.BetRepository;
 import com.games.repository.UserRepository;
 import com.games.rocketmq.producer.MessageProducerService;
 import com.games.util.PageDataResUtil;
+import com.games.util.PageUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -43,7 +42,7 @@ import java.util.stream.Collectors;
 public class SlotGameService {
 
     private final BetRepository betRepository;
-    private final WalletService walletService;
+    private final GamesWalletService gamesWalletService;
     private final MessageProducerService messageProducerService;
     private final SnowflakeIdGenerator idGenerator;
     private final RedisLock redisLock;
@@ -82,11 +81,11 @@ public class SlotGameService {
                 throw new RuntimeException("Bet amount exceeds maximum: " + gameProperties.getMaxBet());
             }
 
-            if (lockedUser.getBalance().compareTo(betAmount) < 0) {
+            if (lockedUser.getGameBalance().compareTo(betAmount) < 0) {
                 throw new RuntimeException("Insufficient balance");
             }
 
-            BigDecimal balanceBefore = lockedUser.getBalance();
+            BigDecimal balanceBefore = lockedUser.getGameBalance();
 
             List<String> spinLt = spin(gameProperties);
 
@@ -109,17 +108,17 @@ public class SlotGameService {
             bet.setGameCode(gameCode);
             bet = betRepository.save(bet);
 
-            walletService.deductBalance(merchant, lockedUser, betAmount, bet, "Slot game bet");
+            gamesWalletService.deductBalance(merchant, lockedUser, betAmount, bet, "Slot game bet");
 
             if (isWin) {
-                walletService.addBalance(merchant, lockedUser, winAmount, bet, "Slot game win");
+                gamesWalletService.addBalance(merchant, lockedUser, winAmount, bet, "Slot game win");
             }
 
             // 使用异步消息更新 RTP 统计，提高性能
             RtpUpdateMessage rtpMessage = new RtpUpdateMessage(betAmount, winAmount, gameCode);
             messageProducerService.sendRtpUpdateMessage(rtpMessage);
 
-            BigDecimal balanceAfter = lockedUser.getBalance();
+            BigDecimal balanceAfter = lockedUser.getGameBalance();
 
             String message = isWin
                     ? "Congratulations! You won " + winAmount + "!"
@@ -211,14 +210,8 @@ public class SlotGameService {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User required");
         }
 
-        int pageNum = request.getPageNum() <= 0 ? 1 : request.getPageNum();
-        int pageSize = request.getPageSize() <= 0 ? 1000 : request.getPageSize();
-
-        Pageable pageable = PageRequest.of(
-                pageNum - 1,
-                pageSize,
-                Sort.by(Sort.Direction.DESC, "id")
-        );
+        Pageable pageable = PageUtils.
+                genericPage(request.getPageNum(), request.getPageSize(), "id");
 
         DateTimeFormatter formatter =
                 DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
@@ -255,8 +248,8 @@ public class SlotGameService {
         // adapt setter names to your PageDataResUtil implementation if they differ
         pageData.setList(records);
         pageData.setTotal(betPage.getTotalElements());
-        pageData.setPage(pageNum);
-        pageData.setSize(pageSize);
+        pageData.setPage(request.getPageNum());
+        pageData.setSize(request.getPageSize());
         pageData.setTotalPages(betPage.getTotalPages());
 
         return pageData;

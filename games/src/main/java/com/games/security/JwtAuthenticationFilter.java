@@ -31,6 +31,19 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request,
                                     HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException {
+        String path = request.getRequestURI();
+        String method = request.getMethod();
+        if ("OPTIONS".equalsIgnoreCase(method)) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+        if (path.startsWith("/actuator") || path.startsWith("/health") || path.startsWith("/static/")
+                || path.indexOf("/odds-format/") > 0 || path.indexOf("/sport-type/") > 0
+                || path.indexOf("/league/") > 0 || path.endsWith(".css") || path.endsWith(".js")
+                || path.endsWith(".png") || path.endsWith(".ico")) {
+            filterChain.doFilter(request, response);
+            return;
+        }
         try {
             String apiKey = request.getHeader("X-API-KEY");
             if (StringUtils.isBlank(apiKey)) {

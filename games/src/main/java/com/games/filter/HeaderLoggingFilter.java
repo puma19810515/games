@@ -22,24 +22,22 @@ public class HeaderLoggingFilter extends OncePerRequestFilter {
     private final MerchantRepository merchantRepository;
 
     @Override
-    protected boolean shouldNotFilter(HttpServletRequest request) {
-        String path = request.getRequestURI();
-        String method = request.getMethod();
-
-        if ("OPTIONS".equalsIgnoreCase(method)) {
-            return true;
-        }
-        if (path.startsWith("/actuator") || path.startsWith("/health") || path.startsWith("/static/")
-                || path.endsWith(".css") || path.endsWith(".js") || path.endsWith(".png")
-                || path.endsWith(".ico")) {
-            return true;
-        }
-        return false;
-    }
-
-    @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
             FilterChain filterChain) throws ServletException, IOException {
+        String path = request.getRequestURI();
+        String method = request.getMethod();
+        if ("OPTIONS".equalsIgnoreCase(method)) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+        if (path.startsWith("/actuator") || path.startsWith("/health") || path.startsWith("/static/")
+                || path.indexOf("/odds-format/") > 0 || path.indexOf("/sport-type/") > 0
+                || path.indexOf("/league/") > 0 || path.indexOf("/sport/event/") > 0
+                || path.endsWith(".css")
+                || path.endsWith(".js") || path.endsWith(".png") || path.endsWith(".ico")) {
+            filterChain.doFilter(request, response);
+            return;
+        }
 
         String apiKey = request.getHeader("X-API-KEY");
         if (StringUtils.isBlank(apiKey)) {
@@ -67,6 +65,8 @@ public class HeaderLoggingFilter extends OncePerRequestFilter {
             log.error("Error validating API key", ex);
             unauthorized(response, "API key validation error");
         }
+
+        filterChain.doFilter(request, response);
     }
 
     private Merchant findMerchantByApiKey(String apiKey) {

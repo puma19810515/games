@@ -22,7 +22,7 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 @RocketMQMessageListener(
         topic = RocketMQConstant.TRANSACTION_TOPIC,
-        consumerGroup = "${rocketmq.consumer.group}",
+        consumerGroup = "${rocketmq.consumer.transaction-group}",
         selectorExpression = RocketMQConstant.TRANSACTION_TAG
 )
 public class TransactionMessageConsumer implements RocketMQListener<TransactionMessage> {

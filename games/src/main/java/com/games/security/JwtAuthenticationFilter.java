@@ -39,7 +39,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         }
         if (path.startsWith("/actuator") || path.startsWith("/health") || path.startsWith("/static/")
                 || path.indexOf("/odds-format/") > 0 || path.indexOf("/sport-type/") > 0
-                || path.indexOf("/league/") > 0 || path.endsWith(".css") || path.endsWith(".js")
+                || path.indexOf("/league/") > 0 || path.indexOf("/sport/event/") > 0
+                || path.endsWith(".css") || path.endsWith(".js")
                 || path.endsWith(".png") || path.endsWith(".ico")) {
             filterChain.doFilter(request, response);
             return;

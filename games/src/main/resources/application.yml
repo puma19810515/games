@@ -70,8 +70,8 @@ jwt:
 
 # 會員註冊時的初始餘額設定
 register:
-  games-initial-balance: 50
-  sport-initial-balance: 1000
+  games-initial-balance: 200
+  sport-initial-balance: 100
 
 # RocketMQ Configuration
 rocketmq:

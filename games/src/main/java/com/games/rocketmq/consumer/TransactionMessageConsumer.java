@@ -50,16 +50,16 @@ public class TransactionMessageConsumer implements RocketMQListener<TransactionM
                 bet = betRepository.findById(message.getBetId()).orElse(null);
             }
 
-            Transaction transaction = new Transaction();
-            transaction.setId(idGenerator.nextId());
-            transaction.setMerchant(merchant);
-            transaction.setUser(user);
-            transaction.setType(message.getType());
-            transaction.setAmount(message.getAmount());
-            transaction.setBalanceBefore(message.getBalanceBefore());
-            transaction.setBalanceAfter(message.getBalanceAfter());
-            transaction.setDescription(message.getDescription());
-            transaction.setBet(bet);
+            Transaction transaction = Transaction.builder()
+                    .merchant(merchant)
+                    .type(message.getType())
+                    .amount(message.getAmount())
+                    .bet(bet)
+                    .balanceAfter(message.getBalanceAfter())
+                    .balanceAfter(message.getBalanceAfter())
+                    .user(user)
+                    .amount(message.getAmount())
+                    .build();
 
             transactionRepository.save(transaction);
 

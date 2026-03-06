@@ -1,6 +1,7 @@
 package com.games.repository;
 
 import com.games.entity.BetLeg;
+import com.games.enums.SettlementResult;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -42,4 +43,5 @@ public interface BetLegRepository extends JpaRepository<BetLeg, Long> {
     @Query("SELECT bl FROM BetLeg bl " +
            "WHERE bl.event.id = :eventId AND bl.result = 'PENDING'")
     List<BetLeg> findPendingByEventId(@Param("eventId") Long eventId);
+
 }

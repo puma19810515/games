@@ -1,6 +1,6 @@
 package com.games.entity;
 
-import com.games.enums.BetLegResult;
+import com.games.enums.SettlementResult;
 import com.games.enums.BetLegSelection;
 import jakarta.persistence.*;
 import lombok.*;
@@ -95,7 +95,7 @@ public class BetLeg {
     @Enumerated(EnumType.STRING)
     @Column(name = "result", length = 20)
     @Comment("結果：WIN-贏, LOSE-輸, PUSH-和, HALF_WIN-半贏, HALF_LOSE-半輸, VOID-作廢, PENDING-待定")
-    private BetLegResult result = BetLegResult.PENDING;
+    private SettlementResult result = SettlementResult.PENDING;
 
     /**
      * 結算係數：

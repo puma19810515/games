@@ -24,7 +24,6 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.*;
-import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 /**
@@ -242,7 +241,7 @@ public class SportBetService {
 
         // 檢查所有腿是否都已有結果
         boolean allSettled = legs.stream()
-                .allMatch(leg -> leg.getResult() != BetLegResult.PENDING);
+                .allMatch(leg -> leg.getResult() != SettlementResult.PENDING);
 
         if (!allSettled) {
             log.info("投注單 {} 尚有未結算的腿，跳過", betId);
@@ -291,7 +290,7 @@ public class SportBetService {
         List<BetLeg> pendingLegs = betLegRepository.findPendingByEventId(eventId);
 
         for (BetLeg leg : pendingLegs) {
-            BetLegResult result = calculateLegResult(leg, homeScore, awayScore,
+            SettlementResult result = calculateLegResult(leg, homeScore, awayScore,
                     homeScoreHalf, awayScoreHalf);
             BigDecimal resultFactor = getResultFactor(result);
 
@@ -495,7 +494,7 @@ public class SportBetService {
                 .handicap(data.getHandicap())
                 .odds(data.getOdds())
                 .oddsDecimal(data.getOddsDecimal())
-                .result(BetLegResult.PENDING)
+                .result(SettlementResult.PENDING)
                 .resultFactor(BigDecimal.ONE)
                 .build()
         ).collect(Collectors.toList());
@@ -520,7 +519,7 @@ public class SportBetService {
      * 計算單注贏取金額
      */
     private BigDecimal calculateSingleWin(BigDecimal stake, BetLeg leg) {
-        BetLegResult result = leg.getResult();
+        SettlementResult result = leg.getResult();
         BigDecimal oddsDecimal = leg.getOddsDecimal();
 
         return switch (result) {
@@ -544,7 +543,7 @@ public class SportBetService {
     private BigDecimal calculateParlayWin(BigDecimal stake, List<BetLeg> legs) {
         // 檢查是否有任何一腿全輸
         boolean hasLose = legs.stream()
-                .anyMatch(leg -> leg.getResult() == BetLegResult.LOSE);
+                .anyMatch(leg -> leg.getResult() == SettlementResult.LOSE);
         if (hasLose) {
             return BigDecimal.ZERO;
         }
@@ -564,7 +563,7 @@ public class SportBetService {
      */
     private BigDecimal calculateEffectiveLegOdds(BetLeg leg) {
         BigDecimal oddsDecimal = leg.getOddsDecimal();
-        BetLegResult result = leg.getResult();
+        SettlementResult result = leg.getResult();
 
         return switch (result) {
             case WIN -> oddsDecimal;
@@ -583,8 +582,8 @@ public class SportBetService {
     /**
      * 計算單腿結果（含讓球、大小邏輯）
      */
-    private BetLegResult calculateLegResult(BetLeg leg, int homeScore, int awayScore,
-                                            Integer homeScoreHalf, Integer awayScoreHalf) {
+    private SettlementResult calculateLegResult(BetLeg leg, int homeScore, int awayScore,
+                                                Integer homeScoreHalf, Integer awayScoreHalf) {
         String betTypeCode = leg.getBetTypeCode();
         BetLegSelection selection = leg.getSelection();
         BigDecimal handicap = leg.getHandicap() != null ? leg.getHandicap() : BigDecimal.ZERO;
@@ -620,19 +619,19 @@ public class SportBetService {
         if (betTypeCode.equals("BTTS")) {
             boolean bothScored = hScore > 0 && aScore > 0;
             if (selection == BetLegSelection.YES) {
-                return bothScored ? BetLegResult.WIN : BetLegResult.LOSE;
+                return bothScored ? SettlementResult.WIN : SettlementResult.LOSE;
             } else {
-                return bothScored ? BetLegResult.LOSE : BetLegResult.WIN;
+                return bothScored ? SettlementResult.LOSE : SettlementResult.WIN;
             }
         }
 
-        return BetLegResult.PENDING;
+        return SettlementResult.PENDING;
     }
 
     /**
      * 計算讓球盤結果
      */
-    private BetLegResult calculateHandicapResult(BetLegSelection selection, int scoreDiff, BigDecimal handicap) {
+    private SettlementResult calculateHandicapResult(BetLegSelection selection, int scoreDiff, BigDecimal handicap) {
         // 計算調整後的分差
         BigDecimal adjustedDiff;
         if (selection == BetLegSelection.HOME) {
@@ -647,7 +646,7 @@ public class SportBetService {
     /**
      * 計算大小盤結果
      */
-    private BetLegResult calculateOverUnderResult(BetLegSelection selection, int totalScore, BigDecimal line) {
+    private SettlementResult calculateOverUnderResult(BetLegSelection selection, int totalScore, BigDecimal line) {
         BigDecimal total = new BigDecimal(totalScore);
         BigDecimal diff;
 
@@ -663,24 +662,24 @@ public class SportBetService {
     /**
      * 評估讓球/大小差值結果（支援四分盤）
      */
-    private BetLegResult evaluateHandicapDiff(BigDecimal diff) {
+    private SettlementResult evaluateHandicapDiff(BigDecimal diff) {
         int cmp = diff.compareTo(BigDecimal.ZERO);
 
         if (cmp > 0) {
             // 大於0.25為全贏，0到0.25為半贏
             if (diff.compareTo(new BigDecimal("0.25")) >= 0) {
-                return BetLegResult.WIN;
+                return SettlementResult.WIN;
             } else {
-                return BetLegResult.HALF_WIN;
+                return SettlementResult.HALF_WIN;
             }
         } else if (cmp == 0) {
-            return BetLegResult.PUSH;
+            return SettlementResult.PUSH;
         } else {
             // 小於-0.25為全輸，-0.25到0為半輸
             if (diff.compareTo(new BigDecimal("-0.25")) <= 0) {
-                return BetLegResult.LOSE;
+                return SettlementResult.LOSE;
             } else {
-                return BetLegResult.HALF_LOSE;
+                return SettlementResult.HALF_LOSE;
             }
         }
     }
@@ -688,31 +687,31 @@ public class SportBetService {
     /**
      * 計算獨贏盤結果
      */
-    private BetLegResult calculateMoneylineResult(BetLegSelection selection, int scoreDiff) {
+    private SettlementResult calculateMoneylineResult(BetLegSelection selection, int scoreDiff) {
         return switch (selection) {
-            case HOME -> scoreDiff > 0 ? BetLegResult.WIN : BetLegResult.LOSE;
-            case AWAY -> scoreDiff < 0 ? BetLegResult.WIN : BetLegResult.LOSE;
-            case DRAW -> scoreDiff == 0 ? BetLegResult.WIN : BetLegResult.LOSE;
-            default -> BetLegResult.PENDING;
+            case HOME -> scoreDiff > 0 ? SettlementResult.WIN : SettlementResult.LOSE;
+            case AWAY -> scoreDiff < 0 ? SettlementResult.WIN : SettlementResult.LOSE;
+            case DRAW -> scoreDiff == 0 ? SettlementResult.WIN : SettlementResult.LOSE;
+            default -> SettlementResult.PENDING;
         };
     }
 
     /**
      * 計算單雙盤結果
      */
-    private BetLegResult calculateOddEvenResult(BetLegSelection selection, int totalScore) {
+    private SettlementResult calculateOddEvenResult(BetLegSelection selection, int totalScore) {
         boolean isOdd = totalScore % 2 != 0;
         if (selection == BetLegSelection.ODD) {
-            return isOdd ? BetLegResult.WIN : BetLegResult.LOSE;
+            return isOdd ? SettlementResult.WIN : SettlementResult.LOSE;
         } else {
-            return isOdd ? BetLegResult.LOSE : BetLegResult.WIN;
+            return isOdd ? SettlementResult.LOSE : SettlementResult.WIN;
         }
     }
 
     /**
      * 獲取結算係數
      */
-    private BigDecimal getResultFactor(BetLegResult result) {
+    private BigDecimal getResultFactor(SettlementResult result) {
         return switch (result) {
             case WIN -> BigDecimal.ONE;
             case HALF_WIN -> new BigDecimal("0.5");

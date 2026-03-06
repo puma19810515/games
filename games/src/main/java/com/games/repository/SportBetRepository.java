@@ -44,4 +44,8 @@ public interface SportBetRepository extends JpaRepository<SportBet, Long>, JpaSp
            "JOIN BetLeg bl ON bl.bet = sb " +
            "WHERE bl.event.id = :eventId AND sb.status = 'PENDING'")
     List<SportBet> findPendingByEventId(@Param("eventId") Long eventId);
+
+    @Query("SELECT DISTINCT sb FROM SportBet sb JOIN BetLeg bl ON bl.bet = sb WHERE bl.event.id = :eventId AND sb.status = 'PENDING'")
+    List<SportBet> findPendingBetsByEventId(@Param("eventId") Long eventId);
+
 }

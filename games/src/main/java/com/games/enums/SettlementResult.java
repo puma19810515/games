@@ -1,8 +1,6 @@
 package com.games.enums;
 
-import org.hibernate.annotations.Comment;
-
-public enum BetLegResult {
+public enum SettlementResult {
     WIN,
     LOSE,
     PUSH,

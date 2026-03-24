@@ -24,67 +24,42 @@ public class GamesWalletController {
     private final AuthService authService;
 
     @PostMapping("/deposit")
-    @RateLimiter(name = "gamesDeposit", fallbackMethod = "gamesDepositFallback")
+    @RateLimiter(name = "gamesDeposit")
     public ResponseEntity<ApiResponse<WalletResponse>> gamesDeposit(
             @Valid @RequestBody DepositRequest request,
             Authentication authentication,
             @RequestAttribute(name = "merchant", required = false) Merchant merchant) {
-        try {
-            String username = authentication.getName();
-            User user = authService.getUserByUsername(merchant.getId(), username);
+        String username = authentication.getName();
+        User user = authService.getUserByUsername(merchant.getId(), username);
+        User updatedUser = gamesWalletService.deposit(merchant, user, request.getAmount());
 
-            User updatedUser = gamesWalletService.deposit(merchant, user, request.getAmount());
-
-            WalletResponse response = new WalletResponse(
-                    updatedUser.getUsername(),
-                    updatedUser.getGameBalance().subtract(request.getAmount()),
-                    updatedUser.getGameBalance(),
-                    request.getAmount(),
-                    TransactionType.DEPOSIT,
-                    "Deposit successful"
-            );
-
-            return ResponseEntity.ok(ApiResponse.success("Deposit successful", response));
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
-        }
-    }
-
-    // 存款限流降级方法
-    public ResponseEntity<ApiResponse<WalletResponse>> gamesDepositFallback(DepositRequest request, Authentication authentication,
-                                                                       Merchant merchant, Throwable t) {
-        return ResponseEntity.status(429)
-                .body(ApiResponse.error("Too many deposit requests. Please try again later."));
+        WalletResponse response = new WalletResponse(
+                updatedUser.getUsername(),
+                updatedUser.getGameBalance().subtract(request.getAmount()),
+                updatedUser.getGameBalance(),
+                request.getAmount(),
+                TransactionType.DEPOSIT,
+                "Deposit successful"
+        );
+        return ResponseEntity.ok(ApiResponse.success("Deposit successful", response));
     }
 
     @PostMapping("/withdraw-all")
-    @RateLimiter(name = "gamesWithdraw", fallbackMethod = "gamesWithdrawAllFallback")
+    @RateLimiter(name = "gamesWithdraw")
     public ResponseEntity<ApiResponse<WalletResponse>> withdrawAll(Authentication authentication,
                                                                    @RequestAttribute(name = "merchant", required = false) Merchant merchant) {
-        try {
-            String username = authentication.getName();
-            User user = authService.getUserByUsername(merchant.getId(), username);
+        String username = authentication.getName();
+        User user = authService.getUserByUsername(merchant.getId(), username);
+        User updatedUser = gamesWalletService.withdrawAll(merchant, user);
 
-            User updatedUser = gamesWalletService.withdrawAll(merchant, user);
-
-            WalletResponse response = new WalletResponse(
-                    updatedUser.getUsername(),
-                    user.getGameBalance(),
-                    updatedUser.getGameBalance(),
-                    user.getGameBalance(),
-                    TransactionType.WITHDRAW,
-                    "Withdraw all successful"
-            );
-            return ResponseEntity.ok(ApiResponse.success("Withdraw all successful", response));
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
-        }
-    }
-
-    // 提款限流降级方法
-    public ResponseEntity<ApiResponse<WalletResponse>> gamesWithdrawAllFallback(Authentication authentication,
-                                                                           Merchant merchant, Throwable t) {
-        return ResponseEntity.status(429)
-                .body(ApiResponse.error("Too many withdraw requests. Please try again later."));
+        WalletResponse response = new WalletResponse(
+                updatedUser.getUsername(),
+                user.getGameBalance(),
+                updatedUser.getGameBalance(),
+                user.getGameBalance(),
+                TransactionType.WITHDRAW,
+                "Withdraw all successful"
+        );
+        return ResponseEntity.ok(ApiResponse.success("Withdraw all successful", response));
     }
 }

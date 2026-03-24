@@ -6,7 +6,6 @@ import com.games.dto.LoginRequest;
 import com.games.dto.RegisterRequest;
 import com.games.entity.Merchant;
 import com.games.service.AuthService;
-import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -23,34 +22,22 @@ public class AuthController {
     @PostMapping("/register")
     public ResponseEntity<ApiResponse<AuthResponse>> register(@Valid @RequestBody RegisterRequest regRequest,
                                                               @RequestAttribute(name = "merchant", required = false) Merchant merchant) {
-        try {
-            AuthResponse response = authService.register(regRequest, merchant);
-            return ResponseEntity.ok(ApiResponse.success("Registration successful", response));
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
-        }
+        AuthResponse response = authService.register(regRequest, merchant);
+        return ResponseEntity.ok(ApiResponse.success("Registration successful", response));
     }
 
     @PostMapping("/login")
     public ResponseEntity<ApiResponse<AuthResponse>> login(@Valid @RequestBody LoginRequest loginRequest,
                                                            @RequestAttribute(name = "merchant", required = false) Merchant merchant) {
-        try {
-            AuthResponse response = authService.login(loginRequest, merchant);
-            return ResponseEntity.ok(ApiResponse.success("Login successful", response));
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
-        }
+        AuthResponse response = authService.login(loginRequest, merchant);
+        return ResponseEntity.ok(ApiResponse.success("Login successful", response));
     }
 
     @PostMapping("/logout")
     public ResponseEntity<ApiResponse<String>> logout(Authentication authentication,
                                                       @RequestAttribute(name = "merchant", required = false) Merchant merchant) {
-        try {
-            String username = authentication.getName();
-            authService.logout(merchant.getUsername(), username);
-            return ResponseEntity.ok(ApiResponse.success("Logout successful", null));
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
-        }
+        String username = authentication.getName();
+        authService.logout(merchant.getUsername(), username);
+        return ResponseEntity.ok(ApiResponse.success("Logout successful", null));
     }
 }

@@ -27,18 +27,13 @@ public class SportSettlementController {
     public ResponseEntity<ApiResponse<Integer>> settleEvent(
             @PathVariable Long eventId,
             @RequestBody SettleEventRequest request) {
-        try {
-            int count = settlementService.settleEventBets(
-                    eventId,
-                    request.getHomeScore(),
-                    request.getAwayScore(),
-                    request.getHomeScoreHalf(),
-                    request.getAwayScoreHalf()
-            );
-            return ResponseEntity.ok(ApiResponse.success(count));
-        } catch (Exception e) {
-            log.error("結算失敗", e);
-            return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
-        }
+        int count = settlementService.settleEventBets(
+                eventId,
+                request.getHomeScore(),
+                request.getAwayScore(),
+                request.getHomeScoreHalf(),
+                request.getAwayScoreHalf()
+        );
+        return ResponseEntity.ok(ApiResponse.success(count));
     }
 }

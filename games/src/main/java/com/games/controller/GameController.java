@@ -1,5 +1,6 @@
 package com.games.controller;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.games.dto.*;
 import com.games.entity.Merchant;
 import com.games.entity.User;
@@ -26,62 +27,38 @@ public class GameController {
     private final AuthService authService;
 
     @PostMapping("/spin/{gameCode}")
-    @RateLimiter(name = "spin", fallbackMethod = "spinFallback")
-    public ResponseEntity<ApiResponse<BetResponse>> spin(@PathVariable String gameCode,
-                                                         @Valid @RequestBody BetRequest request,
+    @RateLimiter(name = "spin")
+    public ResponseEntity<ApiResponse<BetResponse>> spin(@PathVariable String gameCode, @Valid @RequestBody BetRequest request,
                                                          Authentication authentication,
-                                                         @RequestAttribute(name = "merchant", required = false) Merchant merchant) {
-        try {
-            String username = authentication.getName();
-            User user = authService.getUserByUsername(merchant.getId(), username);
-
-            BetResponse response = slotGameService.placeBet(merchant, user, gameCode, request.getAmount());
-            return ResponseEntity.ok(ApiResponse.success(response));
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
-        }
-    }
-
-    // 限流降级方法
-    public ResponseEntity<ApiResponse<BetResponse>> spinFallback(String gameCode, BetRequest request,
-                                                                 Authentication authentication, Merchant merchant,
-                                                                 Throwable t) {
-        log.info("Rate limit exceeded for spin endpoint: {}", t.getMessage());
-        return ResponseEntity.status(429)
-                .body(ApiResponse.error("Too many requests. Please try again later."));
+                                                         @RequestAttribute(name = "merchant", required = false) Merchant merchant)
+            throws JsonProcessingException {
+        String username = authentication.getName();
+        User user = authService.getUserByUsername(merchant.getId(), username);
+        BetResponse response = slotGameService.placeBet(merchant, user, gameCode, request.getAmount());
+        return ResponseEntity.ok(ApiResponse.success(response));
     }
 
     @GetMapping("/balance")
     public ResponseEntity<ApiResponse<Map<String, Object>>> getBalance(Authentication authentication,
                                                                        @RequestAttribute(name = "merchant", required = false) Merchant merchant) {
-        try {
-            String username = authentication.getName();
-            User user = authService.getUserByUsername(merchant.getId(), username);
+        String username = authentication.getName();
+        User user = authService.getUserByUsername(merchant.getId(), username);
 
-            Map<String, Object> data = new HashMap<>();
-            data.put("username", user.getUsername());
-            data.put("gameBalance", user.getGameBalance());
-            data.put("sportBalance", user.getSportBalance());
+        Map<String, Object> data = new HashMap<>();
+        data.put("username", user.getUsername());
+        data.put("gameBalance", user.getGameBalance());
+        data.put("sportBalance", user.getSportBalance());
 
-            return ResponseEntity.ok(ApiResponse.success(data));
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
-        }
+        return ResponseEntity.ok(ApiResponse.success(data));
     }
 
     @PostMapping("/records")
     public ResponseEntity<ApiResponse<PageDataResUtil<BetRecordsResponse>>> getRecords(Authentication authentication,
-                                                                                       @RequestBody BetRecordsRequest request, @RequestAttribute(name = "merchant", required = false) Merchant merchant) {
-        try {
-            String username = authentication.getName();
-            User user = authService.getUserByUsername(merchant.getId(), username);
-
-            PageDataResUtil<BetRecordsResponse> data = slotGameService.getBetRecords(user, request);
-
-            return ResponseEntity.ok(ApiResponse.success(data));
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
-        }
+                                                                                       @RequestBody BetRecordsRequest request,
+                                                                                       @RequestAttribute(name = "merchant", required = false) Merchant merchant) {
+        String username = authentication.getName();
+        User user = authService.getUserByUsername(merchant.getId(), username);
+        PageDataResUtil<BetRecordsResponse> data = slotGameService.getBetRecords(user, request);
+        return ResponseEntity.ok(ApiResponse.success(data));
     }
-
 }

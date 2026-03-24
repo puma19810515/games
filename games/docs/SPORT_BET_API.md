@@ -396,3 +396,207 @@ curl -X GET "http://localhost:8080/api/sport/bet/detail/10001" \
 - `串關不能投注同一場賽事` - 串關中包含重複的賽事
 - `串關至少需要 2 腿` - 串關投注腿數不足
 - `最小投注金額為 1.00` - 投注金額低於最低限制
+
+---
+
+## 六、取消投注（Cancel）
+
+### 6.1 取消投注
+
+**接口路徑：** `POST /api/sport/bet/cancel`
+
+**說明：** 取消待結算的投注單，僅限下注後 5 分鐘內且所有賽事尚未開始
+
+**限制條件：**
+- 投注狀態必須為 `PENDING`（待結算）
+- 下注後 5 分鐘內
+- 所有投注腿的賽事尚未開始
+
+**請求參數：**
+
+| 參數 | 類型 | 必填 | 說明 |
+|-----|------|-----|------|
+| betId | Long | 是 | 投注單 ID |
+| reason | String | 否 | 取消原因 |
+
+**請求範例：**
+```bash
+curl -X POST "http://localhost:8080/api/sport/bet/cancel" \
+  -H "X-API-KEY: your-api-key" \
+  -H "Authorization: Bearer your-jwt-token" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "betId": 12345,
+    "reason": "下錯注"
+  }'
+```
+
+**響應範例：**
+```json
+{
+  "success": true,
+  "message": "Success",
+  "data": {
+    "betId": 12345,
+    "refundAmount": 100.0000,
+    "balanceAfter": 1100.0000,
+    "cancelledAt": "2026-03-24T15:30:00",
+    "reason": "下錯注",
+    "status": "CANCELLED"
+  }
+}
+```
+
+**錯誤範例：**
+```json
+{
+  "success": false,
+  "message": "下注後超過 5 分鐘，無法取消",
+  "data": null
+}
+```
+
+---
+
+## 七、提前兌現（Cashout）
+
+### 7.1 查詢兌現報價
+
+**接口路徑：** `GET /api/sport/bet/cashout/quote/{betId}`
+
+**說明：** 查詢投注單的可兌現金額，報價有效期 30 秒
+
+**請求範例：**
+```bash
+curl -X GET "http://localhost:8080/api/sport/bet/cashout/quote/12345" \
+  -H "X-API-KEY: your-api-key" \
+  -H "Authorization: Bearer your-jwt-token"
+```
+
+**響應範例（可兌現）：**
+```json
+{
+  "success": true,
+  "message": "Success",
+  "data": {
+    "betId": 12345,
+    "cashoutAvailable": true,
+    "unavailableReason": null,
+    "originalStake": 100.0000,
+    "potentialWin": 250.0000,
+    "cashoutAmount": 175.0000,
+    "profitLoss": 75.0000,
+    "cashoutPercentage": 70.00,
+    "validForSeconds": 30
+  }
+}
+```
+
+**響應範例（不可兌現）：**
+```json
+{
+  "success": true,
+  "message": "Success",
+  "data": {
+    "betId": 12345,
+    "cashoutAvailable": false,
+    "unavailableReason": "部分賽事已結束，無法提前兌現",
+    "originalStake": 100.0000,
+    "potentialWin": 250.0000,
+    "cashoutAmount": null,
+    "profitLoss": null,
+    "cashoutPercentage": null,
+    "validForSeconds": 0
+  }
+}
+```
+
+### 7.2 執行提前兌現
+
+**接口路徑：** `POST /api/sport/bet/cashout`
+
+**說明：** 執行提前兌現，將根據當前情況計算兌現金額
+
+**限制條件：**
+- 投注狀態必須為 `PENDING`（待結算）
+- 所有賽事尚未結束
+- 賽事未取消或延期
+
+**請求參數：**
+
+| 參數 | 類型 | 必填 | 說明 |
+|-----|------|-----|------|
+| betId | Long | 是 | 投注單 ID |
+| confirmedAmount | BigDecimal | 否 | 用戶確認的兌現金額（用於驗證金額是否變化） |
+
+**請求範例：**
+```bash
+curl -X POST "http://localhost:8080/api/sport/bet/cashout" \
+  -H "X-API-KEY: your-api-key" \
+  -H "Authorization: Bearer your-jwt-token" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "betId": 12345,
+    "confirmedAmount": 175.0000
+  }'
+```
+
+**響應範例：**
+```json
+{
+  "success": true,
+  "message": "Success",
+  "data": {
+    "betId": 12345,
+    "originalStake": 100.0000,
+    "potentialWin": 250.0000,
+    "cashoutAmount": 175.0000,
+    "profitLoss": 75.0000,
+    "balanceAfter": 1175.0000,
+    "cashedOutAt": "2026-03-24T16:00:00",
+    "status": "CASHED_OUT"
+  }
+}
+```
+
+### 7.3 兌現金額計算邏輯
+
+**單注計算：**
+- **賽前**：本金 × (1 - 手續費率)，手續費率為 5%
+- **進行中**：本金 × 估算勝率 × 賠率 × (1 - 手續費率)
+
+**串關計算：**
+- 計算各腿的有效賠率（考慮比分和進行狀態）
+- 基礎兌現金額 = 本金 × 有效賠率 × (1 - 手續費率)
+- 根據有利腿數調整金額
+
+**限制：**
+- 最低返還：本金的 10%（單注）或 5%（串關）
+- 最高返還：預計最大贏取金額的 95%
+
+### 7.4 兌現條件說明
+
+| 條件 | 可兌現 | 說明 |
+|-----|--------|-----|
+| 投注狀態為 PENDING | ✅ | 只有待結算的投注可兌現 |
+| 所有賽事尚未開始 | ✅ | 賽前兌現 |
+| 部分賽事進行中 | ✅ | 可兌現，金額會根據比分調整 |
+| 部分賽事已結束 | ❌ | 無法兌現 |
+| 賽事取消/延期 | ❌ | 無法兌現，需等待系統退款 |
+| 投注已結算 | ❌ | 已結算的投注無法兌現 |
+
+---
+
+## 八、交易類型說明
+
+| 類型代碼 | 說明 |
+|---------|-----|
+| SPORT_REGISTER | 體育註冊 |
+| SPORT_DEPOSIT | 體育存款 |
+| SPORT_WITHDRAW | 體育提款 |
+| SPORT_BET | 體育投注 |
+| SPORT_WIN | 體育派彩 |
+| SPORT_REFUND | 體育退款 |
+| SPORT_CANCEL | 體育取消（投注取消退款） |
+| SPORT_CASHOUT | 體育提前兌現 |
+

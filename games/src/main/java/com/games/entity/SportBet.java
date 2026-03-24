@@ -95,6 +95,16 @@ public class SportBet {
     @Comment("投注狀態：PENDING-待結算, SETTLED-已結算, CANCELLED-已取消, CASHED_OUT-提前結算")
     private SportBetStatus status = SportBetStatus.PENDING;
 
+    /** 提前兌現金額 */
+    @Column(name = "cashout_amount", precision = 15, scale = 4)
+    @Comment("提前兌現金額")
+    private BigDecimal cashoutAmount;
+
+    /** 取消原因 */
+    @Column(name = "cancel_reason", length = 255)
+    @Comment("取消原因")
+    private String cancelReason;
+
     /** 下注時間 */
     @Column(name = "placed_at", nullable = false)
     @Comment("下注時間")
@@ -104,6 +114,11 @@ public class SportBet {
     @Column(name = "settled_at")
     @Comment("結算時間")
     private LocalDateTime settledAt;
+
+    /** 取消時間 */
+    @Column(name = "cancelled_at")
+    @Comment("取消時間")
+    private LocalDateTime cancelledAt;
 
     /** 建立時間 */
     @Column(name = "created_at", nullable = false, updatable = false)

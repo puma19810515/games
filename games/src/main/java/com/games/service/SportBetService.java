@@ -23,6 +23,7 @@ import org.springframework.web.server.ResponseStatusException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
+import java.time.Duration;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -57,6 +58,14 @@ public class SportBetService {
     private static final BigDecimal MIN_STAKE = new BigDecimal("1.00");
     // 最大投注金額
     private static final BigDecimal MAX_STAKE = new BigDecimal("100000.00");
+
+    // ==================== Cashout 相關常數 ====================
+    // 提前兌現手續費比例（5%）
+    private static final BigDecimal CASHOUT_FEE_RATE = new BigDecimal("0.05");
+    // 投注後可取消時間（分鐘）
+    private static final int CANCEL_ALLOWED_MINUTES = 5;
+    // Cashout 報價有效期（秒）
+    private static final int CASHOUT_QUOTE_VALID_SECONDS = 30;
 
     /**
      * 下注（單注或串關）
@@ -300,6 +309,510 @@ public class SportBetService {
 
             log.info("投注腿 {} 結算完成，結果: {}, 係數: {}", leg.getId(), result, resultFactor);
         }
+    }
+
+    // ==================== 取消投注功能 ====================
+
+    /**
+     * 取消投注（僅限投注後指定時間內，且賽事尚未開始）
+     *
+     * @param merchant 商戶
+     * @param user 用戶
+     * @param request 取消請求
+     * @return 取消響應
+     */
+    @Transactional
+    public CancelBetResponse cancelBet(Merchant merchant, User user, CancelBetRequest request) {
+        Long userId = user.getId();
+        String lockKey = GlobeConstant.USER + GlobeConstant.SEMICOLON + merchant.getApiKey()
+                + GlobeConstant.SEMICOLON + RedisConstant.PLACE_BET + "CANCEL:" + userId;
+        String lockValue = UUID.randomUUID().toString();
+
+        boolean locked = redisLock.tryLockWithRetry(lockKey, lockValue, 30, 3);
+        if (!locked) {
+            throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "系統繁忙，請稍後再試");
+        }
+
+        try {
+            // 查詢投注單
+            SportBet sportBet = sportBetRepository.findByIdAndUserId(request.getBetId(), userId)
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "投注單不存在"));
+
+            // 驗證是否可取消
+            validateCancelAllowed(sportBet);
+
+            // 使用悲觀鎖重新查詢用戶
+            User lockedUser = userRepository.findByIdWithLock(merchant.getId(), userId)
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "用戶不存在"));
+
+            // 退還金額
+            BigDecimal refundAmount = sportBet.getStake();
+            BigDecimal balanceBefore = lockedUser.getSportBalance();
+            BigDecimal balanceAfter = balanceBefore.add(refundAmount);
+            lockedUser.setSportBalance(balanceAfter);
+            userRepository.save(lockedUser);
+
+            // 更新投注單狀態
+            sportBet.setStatus(SportBetStatus.CANCELLED);
+            sportBet.setCancelledAt(LocalDateTime.now());
+            sportBet.setCancelReason(request.getReason() != null ? request.getReason() : "用戶取消");
+            sportBet.setValidBet(BigDecimal.ZERO);
+            sportBetRepository.save(sportBet);
+
+            // 更新所有投注腿為 VOID
+            List<BetLeg> legs = betLegRepository.findByBetIdWithDetails(sportBet.getId());
+            for (BetLeg leg : legs) {
+                leg.setResult(SettlementResult.VOID);
+                leg.setResultFactor(BigDecimal.ZERO);
+            }
+            betLegRepository.saveAll(legs);
+
+            // 記錄交易流水
+            SportTransaction transaction = SportTransaction.builder()
+                    .merchant(merchant)
+                    .user(lockedUser)
+                    .sportBet(sportBet)
+                    .type(SportTransactionType.SPORT_CANCEL)
+                    .amount(refundAmount)
+                    .balanceBefore(balanceBefore)
+                    .balanceAfter(balanceAfter)
+                    .description("投注取消退款 - " + (request.getReason() != null ? request.getReason() : "用戶取消"))
+                    .build();
+            sportTransactionRepository.save(transaction);
+
+            log.info("投注單 {} 已取消，退還金額: {}", sportBet.getId(), refundAmount);
+
+            return CancelBetResponse.builder()
+                    .betId(sportBet.getId())
+                    .refundAmount(refundAmount)
+                    .balanceAfter(balanceAfter)
+                    .cancelledAt(sportBet.getCancelledAt())
+                    .reason(sportBet.getCancelReason())
+                    .status(SportBetStatus.CANCELLED.name())
+                    .build();
+
+        } finally {
+            redisLock.releaseLock(lockKey, lockValue);
+        }
+    }
+
+    /**
+     * 驗證投注是否可取消
+     */
+    private void validateCancelAllowed(SportBet sportBet) {
+        // 檢查狀態
+        if (sportBet.getStatus() != SportBetStatus.PENDING) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "只有待結算的投注可以取消");
+        }
+
+        // 檢查下注時間（僅允許下注後指定分鐘內取消）
+        LocalDateTime now = LocalDateTime.now();
+        Duration timeSincePlaced = Duration.between(sportBet.getPlacedAt(), now);
+        if (timeSincePlaced.toMinutes() > CANCEL_ALLOWED_MINUTES) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "下注後超過 " + CANCEL_ALLOWED_MINUTES + " 分鐘，無法取消");
+        }
+
+        // 檢查所有賽事是否已開始
+        List<BetLeg> legs = betLegRepository.findByBetIdWithDetails(sportBet.getId());
+        for (BetLeg leg : legs) {
+            if (leg.getEvent().getStartTime().isBefore(now)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "部分賽事已開始，無法取消");
+            }
+        }
+    }
+
+    // ==================== 提前兌現（Cashout）功能 ====================
+
+    /**
+     * 查詢提前兌現報價
+     *
+     * @param user 用戶
+     * @param betId 投注單ID
+     * @return 兌現報價
+     */
+    public CashoutQuoteResponse getCashoutQuote(User user, Long betId) {
+        SportBet sportBet = sportBetRepository.findByIdAndUserId(betId, user.getId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "投注單不存在"));
+
+        // 檢查是否可兌現
+        CashoutValidationResult validation = validateCashoutAllowed(sportBet);
+
+        if (!validation.isAllowed()) {
+            return CashoutQuoteResponse.builder()
+                    .betId(betId)
+                    .cashoutAvailable(false)
+                    .unavailableReason(validation.getReason())
+                    .originalStake(sportBet.getStake())
+                    .potentialWin(sportBet.getPotentialWin())
+                    .build();
+        }
+
+        // 計算可兌現金額
+        BigDecimal cashoutAmount = calculateCashoutAmount(sportBet);
+        BigDecimal profitLoss = cashoutAmount.subtract(sportBet.getStake());
+        BigDecimal cashoutPercentage = sportBet.getPotentialWin().compareTo(BigDecimal.ZERO) > 0
+                ? cashoutAmount.divide(sportBet.getPotentialWin(), 4, RoundingMode.HALF_UP)
+                        .multiply(new BigDecimal("100"))
+                : BigDecimal.ZERO;
+
+        return CashoutQuoteResponse.builder()
+                .betId(betId)
+                .cashoutAvailable(true)
+                .originalStake(sportBet.getStake())
+                .potentialWin(sportBet.getPotentialWin())
+                .cashoutAmount(cashoutAmount)
+                .profitLoss(profitLoss)
+                .cashoutPercentage(cashoutPercentage)
+                .validForSeconds(CASHOUT_QUOTE_VALID_SECONDS)
+                .build();
+    }
+
+    /**
+     * 執行提前兌現
+     *
+     * @param merchant 商戶
+     * @param user 用戶
+     * @param request 兌現請求
+     * @return 兌現響應
+     */
+    @Transactional
+    public CashoutResponse cashout(Merchant merchant, User user, CashoutRequest request) {
+        Long userId = user.getId();
+        String lockKey = GlobeConstant.USER + GlobeConstant.SEMICOLON + merchant.getApiKey()
+                + GlobeConstant.SEMICOLON + RedisConstant.PLACE_BET + "CASHOUT:" + userId;
+        String lockValue = UUID.randomUUID().toString();
+
+        boolean locked = redisLock.tryLockWithRetry(lockKey, lockValue, 30, 3);
+        if (!locked) {
+            throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "系統繁忙，請稍後再試");
+        }
+
+        try {
+            // 查詢投注單
+            SportBet sportBet = sportBetRepository.findByIdAndUserId(request.getBetId(), userId)
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "投注單不存在"));
+
+            // 驗證是否可兌現
+            CashoutValidationResult validation = validateCashoutAllowed(sportBet);
+            if (!validation.isAllowed()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, validation.getReason());
+            }
+
+            // 計算兌現金額
+            BigDecimal cashoutAmount = calculateCashoutAmount(sportBet);
+
+            // 如果用戶提供了確認金額，驗證金額是否一致（允許一定誤差）
+            if (request.getConfirmedAmount() != null) {
+                BigDecimal diff = cashoutAmount.subtract(request.getConfirmedAmount()).abs();
+                BigDecimal tolerance = cashoutAmount.multiply(new BigDecimal("0.01")); // 1% 容差
+                if (diff.compareTo(tolerance) > 0) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                            "兌現金額已變更，請重新獲取報價");
+                }
+            }
+
+            // 使用悲觀鎖重新查詢用戶
+            User lockedUser = userRepository.findByIdWithLock(merchant.getId(), userId)
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "用戶不存在"));
+
+            // 更新用戶餘額
+            BigDecimal balanceBefore = lockedUser.getSportBalance();
+            BigDecimal balanceAfter = balanceBefore.add(cashoutAmount);
+            lockedUser.setSportBalance(balanceAfter);
+            userRepository.save(lockedUser);
+
+            // 更新投注單狀態
+            sportBet.setStatus(SportBetStatus.CASHED_OUT);
+            sportBet.setCashoutAmount(cashoutAmount);
+            sportBet.setWinAmount(cashoutAmount);
+            sportBet.setSettledAt(LocalDateTime.now());
+            sportBetRepository.save(sportBet);
+
+            // 更新所有投注腿為 VOID
+            List<BetLeg> legs = betLegRepository.findByBetIdWithDetails(sportBet.getId());
+            for (BetLeg leg : legs) {
+                leg.setResult(SettlementResult.VOID);
+                leg.setResultFactor(BigDecimal.ZERO);
+            }
+            betLegRepository.saveAll(legs);
+
+            // 記錄交易流水
+            SportTransaction transaction = SportTransaction.builder()
+                    .merchant(merchant)
+                    .user(lockedUser)
+                    .sportBet(sportBet)
+                    .type(SportTransactionType.SPORT_CASHOUT)
+                    .amount(cashoutAmount)
+                    .balanceBefore(balanceBefore)
+                    .balanceAfter(balanceAfter)
+                    .description("體育投注提前兌現")
+                    .build();
+            sportTransactionRepository.save(transaction);
+
+            log.info("投注單 {} 提前兌現完成，兌現金額: {}", sportBet.getId(), cashoutAmount);
+
+            return CashoutResponse.builder()
+                    .betId(sportBet.getId())
+                    .originalStake(sportBet.getStake())
+                    .potentialWin(sportBet.getPotentialWin())
+                    .cashoutAmount(cashoutAmount)
+                    .profitLoss(cashoutAmount.subtract(sportBet.getStake()))
+                    .balanceAfter(balanceAfter)
+                    .cashedOutAt(sportBet.getSettledAt())
+                    .status(SportBetStatus.CASHED_OUT.name())
+                    .build();
+
+        } finally {
+            redisLock.releaseLock(lockKey, lockValue);
+        }
+    }
+
+    /**
+     * 驗證投注是否可提前兌現
+     */
+    private CashoutValidationResult validateCashoutAllowed(SportBet sportBet) {
+        // 檢查狀態
+        if (sportBet.getStatus() != SportBetStatus.PENDING) {
+            return new CashoutValidationResult(false, "只有待結算的投注可以提前兌現");
+        }
+
+        // 檢查是否有腿已經結算
+        List<BetLeg> legs = betLegRepository.findByBetIdWithDetails(sportBet.getId());
+
+        // 檢查是否有賽事已結束
+        boolean hasCompletedEvent = legs.stream()
+                .anyMatch(leg -> {
+                    SportEvent event = leg.getEvent();
+                    // 賽事狀態為已完成
+                    return event.getSportEventStatus() == SportEventStatus.FINISHED;
+                });
+
+        if (hasCompletedEvent) {
+            return new CashoutValidationResult(false, "部分賽事已結束，無法提前兌現");
+        }
+
+        // 檢查賽事狀態（賽事被取消的情況）
+        boolean hasCancelledEvent = legs.stream()
+                .anyMatch(leg -> leg.getEvent().getSportEventStatus() == SportEventStatus.CANCELLED ||
+                                 leg.getEvent().getSportEventStatus() == SportEventStatus.POSTPONED);
+        if (hasCancelledEvent) {
+            return new CashoutValidationResult(false, "部分賽事已取消或延期，無法提前兌現");
+        }
+
+        return new CashoutValidationResult(true, null);
+    }
+
+    /**
+     * 計算提前兌現金額
+     *
+     * 計算邏輯：
+     * 1. 對於賽前投注：基礎金額 = 本金 * 當前賠率期望值
+     * 2. 對於進行中的賽事：根據比分和剩餘時間調整
+     * 3. 扣除手續費
+     */
+    private BigDecimal calculateCashoutAmount(SportBet sportBet) {
+        List<BetLeg> legs = betLegRepository.findByBetIdWithDetails(sportBet.getId());
+        BigDecimal stake = sportBet.getStake();
+
+        if (sportBet.getBetType() == SportBetType.SINGLE) {
+            return calculateSingleCashout(stake, legs.get(0));
+        } else {
+            return calculateParlayCashout(stake, legs);
+        }
+    }
+
+    /**
+     * 計算單注兌現金額
+     */
+    private BigDecimal calculateSingleCashout(BigDecimal stake, BetLeg leg) {
+        SportEvent event = leg.getEvent();
+        LocalDateTime now = LocalDateTime.now();
+
+        BigDecimal cashoutBase;
+
+        if (event.getStartTime().isAfter(now)) {
+            // 賽前：返回本金的一定比例（考慮賠率變化風險）
+            // 簡化計算：本金 * 0.9（扣除手續費）
+            cashoutBase = stake.multiply(BigDecimal.ONE.subtract(CASHOUT_FEE_RATE));
+        } else {
+            // 進行中：根據當前狀況計算
+            // 簡化計算：本金 * 當前勝率估算 * 賠率
+            BigDecimal estimatedWinProbability = estimateWinProbability(leg, event);
+            BigDecimal oddsDecimal = leg.getOddsDecimal();
+
+            // 期望值 = 勝率 * 賠率
+            BigDecimal expectedValue = estimatedWinProbability.multiply(oddsDecimal);
+            cashoutBase = stake.multiply(expectedValue)
+                    .multiply(BigDecimal.ONE.subtract(CASHOUT_FEE_RATE));
+        }
+
+        // 確保不超過預計最大贏取金額的 95%
+        BigDecimal maxCashout = stake.multiply(leg.getOddsDecimal())
+                .multiply(new BigDecimal("0.95"));
+
+        // 確保至少返回本金的 10%（防止完全損失）
+        BigDecimal minCashout = stake.multiply(new BigDecimal("0.10"));
+
+        return cashoutBase.max(minCashout).min(maxCashout)
+                .setScale(4, RoundingMode.HALF_UP);
+    }
+
+    /**
+     * 計算串關兌現金額
+     */
+    private BigDecimal calculateParlayCashout(BigDecimal stake, List<BetLeg> legs) {
+        LocalDateTime now = LocalDateTime.now();
+
+        // 計算各腿的有效賠率
+        BigDecimal effectiveOdds = BigDecimal.ONE;
+        int pendingLegs = 0;
+        int favorableLegs = 0;
+
+        for (BetLeg leg : legs) {
+            SportEvent event = leg.getEvent();
+
+            if (event.getStartTime().isAfter(now)) {
+                // 未開始的賽事：使用原始賠率
+                effectiveOdds = effectiveOdds.multiply(leg.getOddsDecimal());
+                pendingLegs++;
+            } else if (event.getSportEventStatus() == SportEventStatus.LIVE) {
+                // 進行中的賽事：使用估算勝率
+                BigDecimal estimatedWinProb = estimateWinProbability(leg, event);
+                BigDecimal adjustedOdds = leg.getOddsDecimal().multiply(estimatedWinProb);
+                effectiveOdds = effectiveOdds.multiply(adjustedOdds.max(new BigDecimal("0.1")));
+
+                if (estimatedWinProb.compareTo(new BigDecimal("0.5")) > 0) {
+                    favorableLegs++;
+                }
+            } else {
+                // 已結束但未結算的賽事（不應該發生）
+                effectiveOdds = effectiveOdds.multiply(leg.getOddsDecimal());
+            }
+        }
+
+        // 基礎兌現金額
+        BigDecimal cashoutBase = stake.multiply(effectiveOdds)
+                .multiply(BigDecimal.ONE.subtract(CASHOUT_FEE_RATE));
+
+        // 根據有利腿數調整
+        if (favorableLegs > legs.size() / 2) {
+            // 多數有利，提高兌現金額
+            cashoutBase = cashoutBase.multiply(new BigDecimal("1.1"));
+        }
+
+        // 限制範圍
+        BigDecimal potentialWin = stake.multiply(legs.stream()
+                .map(BetLeg::getOddsDecimal)
+                .reduce(BigDecimal.ONE, BigDecimal::multiply));
+        BigDecimal maxCashout = potentialWin.multiply(new BigDecimal("0.95"));
+        BigDecimal minCashout = stake.multiply(new BigDecimal("0.05")); // 串關最低返還 5%
+
+        return cashoutBase.max(minCashout).min(maxCashout)
+                .setScale(4, RoundingMode.HALF_UP);
+    }
+
+    /**
+     * 估算投注腿的勝率
+     *
+     * 注意：這是簡化版本，實際應用中應該使用更複雜的算法，
+     * 考慮即時比分、剩餘時間、歷史數據等因素
+     */
+    private BigDecimal estimateWinProbability(BetLeg leg, SportEvent event) {
+        // 獲取當前比分
+        Integer homeScore = event.getHomeScore();
+        Integer awayScore = event.getAwayScore();
+
+        if (homeScore == null || awayScore == null) {
+            // 如果沒有比分資訊，使用預設勝率
+            return new BigDecimal("0.5");
+        }
+
+        int scoreDiff = homeScore - awayScore;
+        BetLegSelection selection = leg.getSelection();
+        String betTypeCode = leg.getBetTypeCode();
+        BigDecimal handicap = leg.getHandicap() != null ? leg.getHandicap() : BigDecimal.ZERO;
+
+        // 讓球盤
+        if (betTypeCode.contains("AH") || betTypeCode.contains("SPREAD")) {
+            BigDecimal adjustedDiff;
+            if (selection == BetLegSelection.HOME) {
+                adjustedDiff = new BigDecimal(scoreDiff).add(handicap);
+            } else {
+                adjustedDiff = new BigDecimal(-scoreDiff).subtract(handicap);
+            }
+
+            // 根據調整後的分差估算勝率
+            if (adjustedDiff.compareTo(new BigDecimal("2")) >= 0) {
+                return new BigDecimal("0.85");
+            } else if (adjustedDiff.compareTo(BigDecimal.ONE) >= 0) {
+                return new BigDecimal("0.70");
+            } else if (adjustedDiff.compareTo(BigDecimal.ZERO) > 0) {
+                return new BigDecimal("0.60");
+            } else if (adjustedDiff.compareTo(BigDecimal.ZERO) == 0) {
+                return new BigDecimal("0.50");
+            } else if (adjustedDiff.compareTo(new BigDecimal("-1")) > 0) {
+                return new BigDecimal("0.40");
+            } else if (adjustedDiff.compareTo(new BigDecimal("-2")) > 0) {
+                return new BigDecimal("0.30");
+            } else {
+                return new BigDecimal("0.15");
+            }
+        }
+
+        // 大小盤
+        if (betTypeCode.contains("OU") || betTypeCode.contains("TOTAL")) {
+            int totalScore = homeScore + awayScore;
+            BigDecimal diff;
+            if (selection == BetLegSelection.OVER) {
+                diff = new BigDecimal(totalScore).subtract(handicap);
+            } else {
+                diff = handicap.subtract(new BigDecimal(totalScore));
+            }
+
+            if (diff.compareTo(new BigDecimal("2")) >= 0) {
+                return new BigDecimal("0.85");
+            } else if (diff.compareTo(BigDecimal.ONE) >= 0) {
+                return new BigDecimal("0.70");
+            } else if (diff.compareTo(BigDecimal.ZERO) > 0) {
+                return new BigDecimal("0.60");
+            } else {
+                return new BigDecimal("0.40");
+            }
+        }
+
+        // 獨贏盤
+        if (betTypeCode.equals("1X2") || betTypeCode.contains("ML")) {
+            switch (selection) {
+                case HOME:
+                    if (scoreDiff > 0) return new BigDecimal("0.75");
+                    if (scoreDiff == 0) return new BigDecimal("0.45");
+                    return new BigDecimal("0.25");
+                case AWAY:
+                    if (scoreDiff < 0) return new BigDecimal("0.75");
+                    if (scoreDiff == 0) return new BigDecimal("0.45");
+                    return new BigDecimal("0.25");
+                case DRAW:
+                    if (scoreDiff == 0) return new BigDecimal("0.55");
+                    return new BigDecimal("0.25");
+                default:
+                    return new BigDecimal("0.5");
+            }
+        }
+
+        // 預設
+        return new BigDecimal("0.5");
+    }
+
+    /**
+     * Cashout 驗證結果
+     */
+    @lombok.Data
+    @lombok.AllArgsConstructor
+    private static class CashoutValidationResult {
+        private boolean allowed;
+        private String reason;
     }
 
     // ==================== 私有方法 ====================

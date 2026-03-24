@@ -442,8 +442,11 @@ CREATE TABLE sport_bets (
     win_amount NUMERIC(15,4) DEFAULT 0,
     valid_bet NUMERIC(15,4),
     status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
+    cashout_amount NUMERIC(15,4),
+    cancel_reason VARCHAR(255),
     placed_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
     settled_at TIMESTAMP WITH TIME ZONE,
+    cancelled_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
 );
@@ -459,8 +462,11 @@ COMMENT ON COLUMN sport_bets.potential_win IS '預計最大贏取金額';
 COMMENT ON COLUMN sport_bets.win_amount IS '實際贏取金額';
 COMMENT ON COLUMN sport_bets.valid_bet IS '有效投注額';
 COMMENT ON COLUMN sport_bets.status IS '投注狀態：PENDING-待結算, SETTLED-已結算, CANCELLED-已取消, CASHED_OUT-提前結算';
+COMMENT ON COLUMN sport_bets.cashout_amount IS '提前兌現金額';
+COMMENT ON COLUMN sport_bets.cancel_reason IS '取消原因';
 COMMENT ON COLUMN sport_bets.placed_at IS '下注時間';
 COMMENT ON COLUMN sport_bets.settled_at IS '結算時間';
+COMMENT ON COLUMN sport_bets.cancelled_at IS '取消時間';
 COMMENT ON COLUMN sport_bets.created_at IS '建立時間';
 COMMENT ON COLUMN sport_bets.updated_at IS '更新時間';
 

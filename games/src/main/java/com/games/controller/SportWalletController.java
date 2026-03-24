@@ -26,67 +26,42 @@ public class SportWalletController {
     private final AuthService authService;
 
     @PostMapping("/deposit")
-    @RateLimiter(name = "sportDeposit", fallbackMethod = "sportDepositFallback")
+    @RateLimiter(name = "sportDeposit")
     public ResponseEntity<ApiResponse<SportWalletResponse>> sportDeposit(
             @Valid @RequestBody DepositRequest request,
             Authentication authentication,
             @RequestAttribute(name = "merchant", required = false) Merchant merchant) {
-        try {
-            String username = authentication.getName();
-            User user = authService.getUserByUsername(merchant.getId(), username);
+        String username = authentication.getName();
+        User user = authService.getUserByUsername(merchant.getId(), username);
+        User updatedUser = sportsWalletService.deposit(merchant, user, request.getAmount());
 
-            User updatedUser = sportsWalletService.deposit(merchant, user, request.getAmount());
-
-            SportWalletResponse response = new SportWalletResponse(
-                    updatedUser.getUsername(),
-                    updatedUser.getSportBalance().subtract(request.getAmount()),
-                    updatedUser.getSportBalance(),
-                    request.getAmount(),
-                    SportTransactionType.SPORT_DEPOSIT,
-                    "Sport Deposit successful"
-            );
-
-            return ResponseEntity.ok(ApiResponse.success("Sport Deposit successful", response));
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
-        }
-    }
-
-    // 存款限流降级方法
-    public ResponseEntity<ApiResponse<SportWalletResponse>> sportDepositFallback(DepositRequest request, Authentication authentication,
-                                                                            Merchant merchant, Throwable t) {
-        return ResponseEntity.status(429)
-                .body(ApiResponse.error("Too many sport deposit requests. Please try again later."));
+        SportWalletResponse response = new SportWalletResponse(
+                updatedUser.getUsername(),
+                updatedUser.getSportBalance().subtract(request.getAmount()),
+                updatedUser.getSportBalance(),
+                request.getAmount(),
+                SportTransactionType.SPORT_DEPOSIT,
+                "Sport Deposit successful"
+        );
+        return ResponseEntity.ok(ApiResponse.success("Sport Deposit successful", response));
     }
 
     @PostMapping("/withdraw-all")
-    @RateLimiter(name = "sportWithdraw", fallbackMethod = "sportWithdrawAllFallback")
+    @RateLimiter(name = "sportWithdraw")
     public ResponseEntity<ApiResponse<SportWalletResponse>> withdrawAll(Authentication authentication,
-                                                                   @RequestAttribute(name = "merchant", required = false) Merchant merchant) {
-        try {
-            String username = authentication.getName();
-            User user = authService.getUserByUsername(merchant.getId(), username);
+                                                                        @RequestAttribute(name = "merchant", required = false) Merchant merchant) {
+        String username = authentication.getName();
+        User user = authService.getUserByUsername(merchant.getId(), username);
+        User updatedUser = sportsWalletService.withdrawAll(merchant, user);
 
-            User updatedUser = sportsWalletService.withdrawAll(merchant, user);
-
-            SportWalletResponse response = new SportWalletResponse(
-                    updatedUser.getUsername(),
-                    user.getSportBalance(),
-                    updatedUser.getSportBalance(),
-                    user.getSportBalance(),
-                    SportTransactionType.SPORT_WITHDRAW,
-                    "Sport withdraw all successful"
-            );
-            return ResponseEntity.ok(ApiResponse.success("Sport withdraw all successful", response));
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
-        }
-    }
-
-    // 提款限流降级方法
-    public ResponseEntity<ApiResponse<SportWalletResponse>> sportWithdrawAllFallback(Authentication authentication,
-                                                                                Merchant merchant, Throwable t) {
-        return ResponseEntity.status(429)
-                .body(ApiResponse.error("Too many sport withdraw requests. Please try again later."));
+        SportWalletResponse response = new SportWalletResponse(
+                updatedUser.getUsername(),
+                user.getSportBalance(),
+                updatedUser.getSportBalance(),
+                user.getSportBalance(),
+                SportTransactionType.SPORT_WITHDRAW,
+                "Sport withdraw all successful"
+        );
+        return ResponseEntity.ok(ApiResponse.success("Sport withdraw all successful", response));
     }
 }

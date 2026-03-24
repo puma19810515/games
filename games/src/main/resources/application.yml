@@ -64,6 +64,13 @@ server:
   port: 8080
   machine-id: 1
 
+# CORS 跨域設定
+# 正式環境請明確指定前端網址，勿使用 "*"
+# 範例：cors.allowed-origins=https://www.example.com,https://admin.example.com
+cors:
+  allowed-origins:
+    - "*"
+
 jwt:
   secret: ${JWT_SECRET:ENC(cNXSyWjlh1/fLaYZXOc9jciCzU2tiT4+vcdoT8qh+ZfkBCeCG+hybXxqFgCYdri03glBQ+sFrRqMe3btE9LvWbAQdtZOHb6CCHKpWjJ7cmdIzX/2tseSepBNEkYjv2rnkNk7JvGg//9GIa89tb02Tg==)}
   expiration: 86400000 # 24 hours in milliseconds

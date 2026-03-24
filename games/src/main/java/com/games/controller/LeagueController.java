@@ -19,10 +19,6 @@ public class LeagueController {
     @PostMapping("/list")
     public ResponseEntity<ApiResponse<PageDataResUtil<LeagueResponse>>> getListByPage(
             @RequestBody PageReqUtil request) {
-        try {
-            return ResponseEntity.ok(ApiResponse.success(leagueService.getListByPage(request)));
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
-        }
+        return ResponseEntity.ok(ApiResponse.success(leagueService.getListByPage(request)));
     }
 }

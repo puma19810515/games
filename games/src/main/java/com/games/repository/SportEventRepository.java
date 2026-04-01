@@ -65,4 +65,14 @@ public interface SportEventRepository extends JpaRepository<SportEvent, Long> {
     @Query("SELECT e FROM SportEvent e " +
            "WHERE e.sportEventStatus = 'FINISHED' AND e.sportEventSettleStatus = 'UNSETTLED'")
     List<SportEvent> findFinishedUnsettled();
+
+    /**
+     * 根據外部賽事ID查詢
+     */
+    Optional<SportEvent> findByExternalEventId(String externalEventId);
+
+    /**
+     * 檢查外部賽事ID是否存在
+     */
+    boolean existsByExternalEventId(String externalEventId);
 }

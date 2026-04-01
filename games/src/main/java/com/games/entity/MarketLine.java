@@ -3,6 +3,7 @@ package com.games.entity;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.hibernate.annotations.Comment;
@@ -37,6 +38,7 @@ import java.util.Map;
 @Data
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @AllArgsConstructor
+@Builder
 @Comment("盤口賠率線表（由爬蟲服務填入）")
 public class MarketLine {
 

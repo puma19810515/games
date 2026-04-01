@@ -33,6 +33,9 @@ public class HeaderLoggingFilter extends OncePerRequestFilter {
         if (path.startsWith("/actuator") || path.startsWith("/health") || path.startsWith("/static/")
                 || path.indexOf("/odds-format/") > 0 || path.indexOf("/sport-type/") > 0
                 || path.indexOf("/league/") > 0 || path.indexOf("/sport/event/") > 0
+                // Swagger UI 相關路徑
+                || path.startsWith("/swagger-ui") || path.startsWith("/v3/api-docs")
+                || path.startsWith("/swagger-resources") || path.startsWith("/webjars")
                 || path.endsWith(".css")
                 || path.endsWith(".js") || path.endsWith(".png") || path.endsWith(".ico")) {
             filterChain.doFilter(request, response);

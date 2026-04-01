@@ -41,6 +41,14 @@ public class SecurityConfig {
                         .requestMatchers("/api/league/**").permitAll()
                         .requestMatchers("/api/odds-format/**").permitAll()
                         .requestMatchers("/api/sport-type/**").permitAll()
+                        // 爬蟲接口（使用 API Key 認證，不需要 JWT）
+                        .requestMatchers("/api/crawler/**").permitAll()
+                        // Swagger UI 相關路徑
+                        .requestMatchers("/swagger-ui/**").permitAll()
+                        .requestMatchers("/swagger-ui.html").permitAll()
+                        .requestMatchers("/v3/api-docs/**").permitAll()
+                        .requestMatchers("/swagger-resources/**").permitAll()
+                        .requestMatchers("/webjars/**").permitAll()
                         .anyRequest().authenticated()
                 )
                 .exceptionHandling(ex -> ex

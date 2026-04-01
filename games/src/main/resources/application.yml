@@ -39,14 +39,14 @@ spring:
         format_sql: true
   data:
     redis:
-      host: sweet-sloth-56657.upstash.io
+      host: 127.0.0.1 # sweet-sloth-56657.upstash.io
       port: 6379
-      username: default
-      password: ${REDIS_PASSWORD:ENC(UpFVasnn6PJ2lOAJgcG5xuqqrr1KYYq6iUaHYLTEfX0cvs/EKHeXY/WG3TMURzWbROR09CwapCOGDDA+wuCgFFKtfAyAZ3H9imgR1Qqt/bE+b+0l3sEiGnIS+WgxdHDR)}
+      # username: default
+      # password: ${REDIS_PASSWORD:ENC(UpFVasnn6PJ2lOAJgcG5xuqqrr1KYYq6iUaHYLTEfX0cvs/EKHeXY/WG3TMURzWbROR09CwapCOGDDA+wuCgFFKtfAyAZ3H9imgR1Qqt/bE+b+0l3sEiGnIS+WgxdHDR)}
       database: 0
       timeout: 3000ms
       ssl:
-        enabled: true   # 🔥 Upstash 必須開
+        enabled: false   # 🔥 Upstash 必須開
       lettuce:
         pool:
           max-active: 100
@@ -124,6 +124,23 @@ resilience4j:
         limit-for-period: 3
         limit-refresh-period: 1s
         timeout-duration: 0s
+      # 爬蟲接口頻率限制
+      crawlerLeagues:
+        limit-for-period: 60
+        limit-refresh-period: 60s
+        timeout-duration: 0s
+      crawlerTeams:
+        limit-for-period: 60
+        limit-refresh-period: 60s
+        timeout-duration: 0s
+      crawlerEvents:
+        limit-for-period: 120
+        limit-refresh-period: 60s
+        timeout-duration: 0s
+      crawlerMarketLines:
+        limit-for-period: 300
+        limit-refresh-period: 60s
+        timeout-duration: 0s
 
 # Actuator for monitoring
 management:
@@ -134,3 +151,27 @@ management:
   endpoint:
     health:
       show-details: always
+
+# SpringDoc OpenAPI (Swagger) 配置
+springdoc:
+  api-docs:
+    enabled: true
+    path: /v3/api-docs
+  swagger-ui:
+    enabled: true
+    path: /swagger-ui.html
+    # 按標籤排序
+    tags-sorter: alpha
+    # 按方法排序
+    operations-sorter: alpha
+    # 顯示請求時間
+    display-request-duration: true
+    # 預設展開深度
+    doc-expansion: none
+    # 過濾操作
+    filter: true
+  # 掃描的套件
+  packages-to-scan: com.games.controller
+  # 顯示 actuator 端點
+  show-actuator: false
+

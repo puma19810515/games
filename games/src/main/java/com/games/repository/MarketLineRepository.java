@@ -46,4 +46,14 @@ public interface MarketLineRepository extends JpaRepository<MarketLine, Long> {
             @Param("eventId") Long eventId,
             @Param("betTypeCode") String betTypeCode
     );
+
+    /**
+     * 根據外部盤口ID查詢
+     */
+    Optional<MarketLine> findByExternalMarketId(String externalMarketId);
+
+    /**
+     * 檢查外部盤口ID是否存在
+     */
+    boolean existsByExternalMarketId(String externalMarketId);
 }
